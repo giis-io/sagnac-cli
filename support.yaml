@@ -1,0 +1,6 @@
+# Single source for the support date and the publisher contact.
+# Injected into the binary at build time (see Makefile) and read by the site.
+end_of_support: 2032-12
+publisher: GIIS
+security_contact: securite@sagnac.fr
+security_url: https://github.com/giis-io/sagnac-cli/blob/main/SECURITY.md

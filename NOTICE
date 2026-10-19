@@ -1,0 +1,13 @@
+sagnac
+Copyright 2026 GIIS
+
+Fabricant : GIIS, 66 avenue des Champs-Élysées, 75008 Paris
+Contact pour signaler une vulnérabilité : securite@sagnac.fr
+Politique de sécurité : https://github.com/giis-io/sagnac-cli/blob/main/SECURITY.md
+
+Ce logiciel est distribué sous licence Apache, version 2.0 (fichier LICENSE).
+Vous ne pouvez l'utiliser qu'en respectant cette licence. Elle est disponible
+à l'adresse https://www.apache.org/licenses/LICENSE-2.0
+
+Sauf obligation légale ou accord écrit, le logiciel est fourni « en l'état »,
+sans garantie d'aucune sorte, expresse ou implicite.

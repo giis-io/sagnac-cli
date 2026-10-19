@@ -1,0 +1,50 @@
+{
+  "declared_exit": 1,
+  "declared_failures": [
+    "verify_executable:HELLO_NOT_EXECUTABLE"
+  ],
+  "result": {
+    "schema": "sagnac-result/2",
+    "lab": {
+      "id": "hello",
+      "version": 3
+    },
+    "checks_sha256": "7d3f8ff301086c486f10e5d4f812200a5b1b6afbce02782441bcc1e9b7bcaa76",
+    "session": "local",
+    "seed": 20261019,
+    "status": "fail",
+    "exit_code": 1,
+    "checks": [
+      {
+        "id": "verify_executable",
+        "step": 1,
+        "status": "fail",
+        "code": "HELLO_NOT_EXECUTABLE",
+        "origin": "student",
+        "observed": "not_executable",
+        "expected": "executable",
+        "blocked_by": null
+      },
+      {
+        "id": "verify_greeting",
+        "step": 2,
+        "status": "skip",
+        "code": null,
+        "origin": null,
+        "observed": null,
+        "expected": null,
+        "blocked_by": "verify_executable"
+      },
+      {
+        "id": "verify_usage",
+        "step": 3,
+        "status": "skip",
+        "code": null,
+        "origin": null,
+        "observed": null,
+        "expected": null,
+        "blocked_by": "verify_executable"
+      }
+    ]
+  }
+}

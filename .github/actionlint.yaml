@@ -1,0 +1,4 @@
+# Labels of the self-hosted runner group of this repository (.github/workflows/pr.yml).
+self-hosted-runner:
+  labels:
+    - sagnac-cli-pr
