@@ -44,7 +44,8 @@ Clés du lab (liste fermée) : `id`, `version`, `title`, `type` (`guide`,
 `standalone`, `troubleshooting`), `difficulty`, `target_minutes`,
 `objectives`, `prerequisites`, `tools`, `genai`, `gpu`, `docker`,
 `network_during_check`, `max_memory_mb`, `certifiable`, `artifacts`,
-`preconditions` (chacune `code`, `description`), `checks`.
+`preconditions` (chacune `code`, `description`), `checks`, et `cluster`,
+facultative (section 7).
 
 Clés d'un contrôle (liste fermée) :
 
@@ -64,6 +65,10 @@ Les cinq booléens (`genai`, `gpu`, `docker`, `network_during_check`,
 ces règles et tout `meta.yaml` du contrat v1 sont refusés en les nommant :
 `ORACLE_INVALID_KIT`, code de sortie 3. Un fichier à moitié lu n'est jamais
 exécuté.
+
+`checks/teardown.sh`, s'il existe, est un fichier exécutable (sinon kit
+invalide) : il défait ce que le passage a créé hors processus (images,
+conteneurs) et tourne après le dernier contrôle (section 3).
 
 ## 3. Appel de l'oracle
 
@@ -192,3 +197,17 @@ Le message d'un code est lu dans `<lab>/checks/messages/<langue>/<CODE>.txt`,
 puis dans `_cadre/messages/<langue>/` s'il existe, avec repli sur le français
 à chaque niveau. `{observed}` et `{expected}` y sont remplacés par les valeurs
 typées. Sans fichier, la CLI affiche le code.
+
+## 7. Labs à cluster
+
+Un lab déclare `cluster: <nom>` pour travailler sur un cluster Kubernetes
+local, partagé entre les labs d'un parcours (`sagnac-b1` pour B1-M2 à M6).
+`make setup` du kit le crée ou le démarre (`_cadre/bin/sagnac-cluster`) ;
+`sagnac check` ne le crée jamais.
+
+- **Kit.** `<nom>` (`[a-z0-9][a-z0-9-]{0,31}`) désigne
+  `_cadre/clusters/<nom>.conf`, lignes `CLE=valeur` dont la première
+  `API_PORT` (1 à 65535) donne le port de l'API sur `127.0.0.1`. Le lab
+  déclare aussi `docker: true`, dans `tools` au moins `k3d`, `kubectl`, `k3s`,
+  `k3s-airgap` et `k3d-tools`, et les préconditions `CLUSTER_DIRTY` et
+  `CLUSTER_BUSY` (avec leurs messages). Sinon : `ORACLE_INVALID_KIT`.

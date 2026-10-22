@@ -103,7 +103,18 @@ type Lab struct {
 	Artifacts          []string
 	Preconditions      map[string]string
 	Checks             []Check
-	libPath            string // _cadre/lib/controle.sh of the kit
+	// Docker: docker is true, the platform of the result names the
+	// container engine.
+	Docker bool
+	// Cluster is the name of the local Kubernetes cluster of the lab, empty
+	// without one (docs/contrat.md, section 7); APIPort is the port of its
+	// API on 127.0.0.1, read in _cadre/clusters/<name>.conf.
+	Cluster string
+	APIPort int
+	// Teardown is checks/teardown.sh when the lab has one, run after the
+	// last check.
+	Teardown string
+	libPath  string // _cadre/lib/controle.sh of the kit
 }
 
 // resolve makes dir absolute and resolves symbolic links as far as the path
@@ -174,7 +185,7 @@ func listOrEmpty(v any) ([]any, bool) {
 var (
 	metaKeys = keySet("id", "version", "title", "type", "difficulty", "target_minutes", "objectives",
 		"prerequisites", "tools", "genai", "gpu", "docker", "network_during_check", "max_memory_mb",
-		"certifiable", "artifacts", "preconditions", "checks")
+		"certifiable", "artifacts", "preconditions", "checks", "cluster")
 	preconditionKeys = keySet("code", "description")
 	checkKeys        = keySet("id", "step", "script", "timeout_s", "depends_on", "codes", "preconditions",
 		"observed", "expected")
@@ -303,6 +314,10 @@ func LoadLab(dir string) (*Lab, error) {
 	lab.GenAI, _ = boolean(valueOr(meta, "genai", false), "genai")
 	lab.Certifiable, _ = boolean(valueOr(meta, "certifiable", false), "certifiable")
 	lab.NetworkDuringCheck, _ = boolean(valueOr(meta, "network_during_check", false), "network_during_check")
+	lab.Docker, _ = boolean(valueOr(meta, "docker", false), "docker")
+	if err := lab.loadCluster(meta); err != nil {
+		return nil, err
+	}
 	if lab.Artifacts, err = artifacts(meta["artifacts"], lab.Certifiable); err != nil {
 		return nil, err
 	}
@@ -327,6 +342,13 @@ func LoadLab(dir string) (*Lab, error) {
 			return nil, kitErr("meta.yaml", "precondition "+code+" without description")
 		}
 		lab.Preconditions[code] = desc
+	}
+	if lab.Cluster != "" {
+		for _, code := range []string{codeClusterDirty, codeClusterBusy} {
+			if _, declared := lab.Preconditions[code]; !declared {
+				return nil, kitErr("meta.yaml", "a lab with a cluster declares the precondition "+code)
+			}
+		}
 	}
 
 	checks, ok := meta["checks"].([]any)
@@ -430,6 +452,13 @@ func LoadLab(dir string) (*Lab, error) {
 		if !isRegular(filepath.Join(dir, "checks", "messages", "fr", code+".txt")) {
 			return nil, kitErr("checks/messages/fr/"+code+".txt", "missing (French is the reference language)")
 		}
+	}
+	teardown := filepath.Join(dir, "checks", "teardown.sh")
+	if _, err := os.Stat(teardown); err == nil {
+		if !isRegular(teardown) || !executable(teardown) {
+			return nil, kitErr("checks/teardown.sh", "not executable")
+		}
+		lab.Teardown = teardown
 	}
 	if lab.libPath, err = findLib(dir); err != nil {
 		return nil, err
