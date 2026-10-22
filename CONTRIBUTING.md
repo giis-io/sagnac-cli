@@ -30,7 +30,7 @@ Messages de commit : `type: message`, avec `type` parmi `feat`, `fix`,
 
 ## Lancer les tests
 
-Il faut Go 1.26.9 (fixé dans `go.mod`), `make`, `git` et un shell POSIX ;
+Il faut Go 1.26.10 (fixé dans `go.mod`), `make`, `git` et un shell POSIX ;
 `python3` ou `perl` et `curl` permettent à quelques tests de ne pas être sautés.
 
 ```
