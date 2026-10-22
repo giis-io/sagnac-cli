@@ -1,5 +1,9 @@
 # sagnac
 
+> **Version de développement, pas encore publiée.** Aucune version n'est encore
+> distribuée : le code évolue sans préavis. Pour signaler une vulnérabilité, voir
+> [SECURITY.md](SECURITY.md).
+
 `sagnac` est la ligne de commande de la formation Sagnac. Elle s'installe sur le
 poste de l'élève, lance les vérifications d'un lab et affiche le résultat.
 
