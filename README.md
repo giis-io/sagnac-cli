@@ -13,7 +13,7 @@ Les commandes `submit` et `update` arrivent ensuite.
 ## Installer depuis les sources
 
 Il n'existe pas encore de binaire publié : on construit `sagnac` soi-même, depuis
-un clone du dépôt. Il faut Go 1.26.9 (version fixée dans `go.mod`) et `make`.
+un clone du dépôt. Il faut Go 1.26.10 (version fixée dans `go.mod`) et `make`.
 
 ```
 make build
