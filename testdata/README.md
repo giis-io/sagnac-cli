@@ -39,3 +39,44 @@ compte, comme dans git.
 `TestCrossCheck` rejoue en plus l'exécuteur de référence lui-même, sur les
 labs que désignent `SAGNAC_XCHECK_REFERENCE` et `SAGNAC_XCHECK_LABS` ; il ne
 tourne que dans la CI de la plateforme et il est sauté ailleurs.
+
+Pour un lab à cluster (`cluster:` dans `meta.yaml`), `TestCrossCheck` ne lance
+jamais `make setup`, qui créerait le cluster : l'espace vient de `starter/`
+(`_cadre/lib/espace.sh`), puis de la solution et des mutants, et `HOME` est un
+dossier du test, si bien qu'aucun des deux exécuteurs ne voit le cache d'un
+vrai cluster. Les deux doivent rendre le même résultat dans trois situations :
+sans cluster (préconditions du lab, `CLUSTER_MISSING`), cluster tenu par un
+autre `check` (`CLUSTER_BUSY` partout) et cluster sale (un `kubectl` de
+substitution liste toujours un pod restant : `CLUSTER_DIRTY` partout).
+
+## Tests qui demandent Linux ou un vrai cluster
+
+`TestEnvelopeClusterLinux` et `TestEnvelopeClusterCleanupLinux`
+(`internal/oracle`) vérifient la coupure du réseau et le relais de l'API sous
+Linux : ils sont sautés si `unshare -rnm unshare -Ur true` est refusé. Ils
+n'ont besoin d'aucun cluster (un serveur local tient lieu d'API) ; un
+conteneur Ubuntu 24.04 lancé avec `--security-opt seccomp=unconfined
+--security-opt apparmor=unconfined --init` suffit, en root comme sans
+privilège.
+
+Le passage complet d'un lab à cluster (solution verte, mutants rouges avec
+les codes de `mutant.yaml`, même résultat que l'exécuteur de référence)
+demande le cluster `sagnac-b1` : il se joue sur une VM jetable de l'usine,
+jamais sur un poste ni sur un hôte persistant. Sur la VM (Linux, moteur de
+conteneurs, Go, `python3`, `make`), avec le dépôt de la plateforme
+`<plateforme>` et ce dépôt :
+
+```
+make -C <plateforme>/labs/RN/rn-l6-kubernetes setup   # outils et cluster sagnac-b1 (réseau requis la première fois)
+cd <sagnac-cli>
+go test -count=1 -run 'Envelope|Relay|Gateway|Cluster' -v ./internal/oracle
+L=<plateforme>/labs
+SAGNAC_XCHECK_CLUSTER=1 SAGNAC_XCHECK_REFERENCE=$L/_cadre/sagnac_local.py \
+SAGNAC_XCHECK_LABS=$L/RN/rn-l6-kubernetes:$L/B1-M2/b1-m2-l2-model-volume:$L/B1-M2/b1-m2-l3-resources:$L/B1-M2/b1-m2-l4-probes:$L/B1-M2/b1-m2-l5-oomkilled \
+  go test -count=1 -timeout 60m -run TestCrossCheck -v ./internal/oracle
+make -C <plateforme>/labs/RN/rn-l6-kubernetes cluster-delete
+```
+
+Avec `SAGNAC_XCHECK_CLUSTER=1`, `TestCrossCheck` traite un lab à cluster
+comme les autres : `make setup` (hors ligne, cluster déjà créé), solution et
+mutants, coupure du réseau, donc relais de l'API sous Linux.
