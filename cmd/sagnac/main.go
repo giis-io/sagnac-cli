@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/giis-io/sagnac-cli/internal/i18n"
+	"github.com/giis-io/sagnac-cli/internal/oracle"
 )
 
 // Set at build time with -ldflags -X from support.yaml (see Makefile).
@@ -30,6 +31,11 @@ func main() {
 			os.Exit(exitCodeOf(errUnexpected))
 		}
 	}()
+	// Inside the network namespace of a check of a lab with a cluster
+	// (Linux): relay of the API of the cluster, nothing else.
+	if len(os.Args) > 1 && os.Args[1] == oracle.RelayCommand {
+		os.Exit(oracle.RunRelay(os.Args[2:]))
+	}
 	os.Exit(run(os.Args[1:], os.Getenv, os.Stdout, os.Stderr))
 }
 

@@ -48,7 +48,16 @@ func Verify(ctx context.Context, lab *Lab, workspace string, seed int64, noNetwo
 	}
 	var prefix []string
 	if noNetwork {
-		if prefix, _ = networkWrapper(); prefix == nil {
+		var gw *gateway
+		if lab.Cluster != "" && needsGateway {
+			var err error
+			if gw, err = openGateway(lab.APIPort); err != nil {
+				return nil, ErrNetworkCutUnavailable
+			}
+			// After the closing cleanup, which goes through it.
+			defer gw.close()
+		}
+		if prefix, _ = networkWrapper(lab.Cluster != "", gw); prefix == nil {
 			return nil, ErrNetworkCutUnavailable
 		}
 	}

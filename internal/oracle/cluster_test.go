@@ -456,3 +456,12 @@ func orNil(s string) string {
 	}
 	return s
 }
+
+func readFile(t *testing.T, p string) string {
+	t.Helper()
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}

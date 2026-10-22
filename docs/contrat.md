@@ -122,9 +122,15 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
 - **Réseau.** Aucun appel sortant pendant `check`, sauf si le lab déclare
   `network_during_check: true` : la CLI ne coupe alors rien. Sinon, elle le
   coupe :
-  `sandbox-exec` sous macOS (localhost et sockets Unix permis), `unshare -rn`
-  sous Linux. Sans méthode disponible, elle l'écrit sur la sortie d'erreur puis
-  lance les contrôles sans coupure.
+  `sandbox-exec` sous macOS (localhost et sockets Unix permis), `unshare -rnm`
+  puis `unshare -Ur` sous Linux (le contrôle, root d'un espace de noms
+  utilisateur enfant, ne peut ni démonter ni remonter). Dans les deux cas, le
+  kubeconfig administrateur des clusters
+  (`~/.cache/sagnac/clusters/*/admin/`) est illisible, quel que soit le lab :
+  refus du profil sous macOS, `tmpfs` sous Linux, dont l'échec arrête le
+  contrôle (`ORACLE_CHECK_INTERRUPTED`), jamais de contrôle sans masque. Sans
+  méthode disponible, elle l'écrit sur la sortie d'erreur puis lance les
+  contrôles sans coupure.
 
 ## 4. Résultat `sagnac-result/2`
 
@@ -240,3 +246,16 @@ local, partagé entre les labs d'un parcours (`sagnac-b1` pour B1-M2 à M6).
   délai avant le premier contrôle (objets restés d'un passage interrompu),
   aucun contrôle n'est lancé : chacun rend `CLUSTER_DIRTY` (`error`,
   `platform`, code 2).
+- **Coupure du réseau.** Les contrôles parlent au cluster par la seule API
+  Kubernetes (`sagnac_kubectl`, identité « contrôle »), jamais par le socket
+  du moteur de conteneurs. macOS : l'API est sur `127.0.0.1:<port>`, permis
+  par le profil, qui retire pour ce lab les sockets Unix. Linux : l'espace de
+  noms réseau du contrôle n'a pas le `127.0.0.1` de l'hôte ; la CLI ouvre
+  hors de cet espace un socket Unix dans un dossier privé (0700, sous
+  `TMPDIR`, ou `/tmp` si le chemin est trop long) relié au seul port de
+  l'API, et relance son propre binaire dans l'espace du contrôle
+  (`sagnac __cluster-relay`, commande cachée) qui écoute `127.0.0.1:<port>`,
+  renvoie vers ce socket (32 connexions simultanées au plus) et lance le
+  contrôle. Rien d'autre ne passe : ni Internet, ni un autre port de l'hôte,
+  ni le moteur (`/run` et `/var/run` recouverts d'un `tmpfs`). Le kubeconfig
+  reste valide tel quel. Le ramassage passe par la même enveloppe.
