@@ -82,7 +82,21 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
   session (groupe de processus), avec un environnement réduit : `PATH`,
   `HOME`, `TMPDIR`, `LC_ALL=C`, `XDG_CONFIG_HOME`, et `SAGNAC_LAB`,
   `SAGNAC_CHECK`, `SAGNAC_WORKSPACE`, `SAGNAC_SEED`, `SAGNAC_RESULT`,
-  `SAGNAC_LIB`. Tout ce qu'il a lancé est tué à sa fin.
+  `SAGNAC_LIB`, plus `SAGNAC_CLUSTER` pour un lab à cluster (section 7).
+  S'y ajoutent `DOCKER_HOST` s'il est posé et commence par `unix://` (moteur
+  choisi par l'élève), `KUBECACHEDIR` et `DOCKER_CONFIG` seulement s'ils sont
+  sous le `TMPDIR` de la commande, et, par `GIT_CONFIG_COUNT`,
+  `safe.directory=*`, `core.fsmonitor=false` et `core.hooksPath=/dev/null` :
+  Git lit les dépôts de l'espace quel que soit leur propriétaire, sans leurs
+  crochets. Tout ce qu'il a lancé est tué à sa fin.
+- **Ramassage.** Après le dernier contrôle, `checks/teardown.sh` (s'il
+  existe) défait ce que le passage a créé hors processus ; pour un lab à
+  cluster, `_cadre/lib/cluster-nettoyage.sh` vide aussi l'espace du cluster
+  avant le premier contrôle et après le dernier (section 7). Même
+  environnement (sans `SAGNAC_CHECK` ni `SAGNAC_RESULT`) et même coupure du
+  réseau que les contrôles, 120 s chacun, hors plafond et hors `duration_ms`,
+  même après un délai dépassé ou une interruption. Le ramassage de fin ne
+  change pas le verdict.
 - **Fin du script.** Il se termine par une seule des fonctions de
   `lib/controle.sh`, qui écrit dans `SAGNAC_RESULT` des lignes `code=`,
   `observed=`, `expected=` :
@@ -128,11 +142,16 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
 | `status` | `pass`, `fail` ou `error` |
 | `exit_code` | code de la section 5 |
 | `checks[]` | `id`, `step`, `status` (`pass`, `fail`, `error`, `skip`), `code` (pour `fail` et `error` seulement), `origin` (`student`, `platform`, `oracle`), `observed`, `expected`, `blocked_by`, `duration_ms`, dans l'ordre des étapes |
-| `platform` | `os`, `architecture`, `container_engine`, `engine_version` |
+| `platform` | `os`, `architecture`, `container_engine`, `engine_version` (ci-dessous) |
 
 Le JSON ne contient aucun texte localisé ni aucune chaîne libre lue sur le
 poste : seules les valeurs typées de `meta.yaml` sortent. Il est identique
 d'une langue à l'autre, horodatage et durées mis à part.
+
+`container_engine` et `engine_version`, pour un lab `docker: true` : `docker`
+ou `podman` et la version du serveur lue par `docker version` (32 caractères
+au plus, `[0-9][0-9A-Za-z.+~-]*`) ; `null` sinon, ou si le moteur ne répond
+pas. `duration_ms` ne compte pas le ramassage (section 3).
 
 `checks_sha256` : SHA-256 de la suite, pour `meta.yaml` puis chaque fichier de
 `checks/` dans l'ordre des chemins (parcours en profondeur, noms triés), de
@@ -211,3 +230,13 @@ local, partagé entre les labs d'un parcours (`sagnac-b1` pour B1-M2 à M6).
   déclare aussi `docker: true`, dans `tools` au moins `k3d`, `kubectl`, `k3s`,
   `k3s-airgap` et `k3d-tools`, et les préconditions `CLUSTER_DIRTY` et
   `CLUSTER_BUSY` (avec leurs messages). Sinon : `ORACLE_INVALID_KIT`.
+- **Verrou.** Un seul `check` à la fois par cluster : la CLI prend sans
+  attendre `flock` sur `~/.cache/sagnac/clusters/<nom>/check.lock` (créé par
+  `make setup`). S'il est tenu, elle ne ramasse ni ne lance rien et chaque
+  contrôle rend `CLUSTER_BUSY` (`error`, `platform`, code 2). Sans ce
+  fichier (cluster jamais installé), le passage continue et les contrôles le
+  disent (`CLUSTER_MISSING`).
+- **Ramassage d'ouverture.** Si `cluster-nettoyage.sh` échoue ou dépasse son
+  délai avant le premier contrôle (objets restés d'un passage interrompu),
+  aucun contrôle n'est lancé : chacun rend `CLUSTER_DIRTY` (`error`,
+  `platform`, code 2).

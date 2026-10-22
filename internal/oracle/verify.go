@@ -35,6 +35,12 @@ var ErrInterrupted error = interruptedError{}
 // cancelled ctx (Ctrl-C) kills the running check with its process group and
 // gives ErrInterrupted, never a result. A workspace that is not a
 // directory gives a *UsageError.
+//
+// A lab with a cluster takes the lock of its cluster (CLUSTER_BUSY for
+// every check when another run holds it) and cleans its namespace before
+// the first check (CLUSTER_DIRTY for every check when objects are left)
+// and after the last one; checks/teardown.sh runs after the last one
+// (docs/contrat.md, sections 3 and 7). Neither counts in duration_ms.
 func Verify(ctx context.Context, lab *Lab, workspace string, seed int64, noNetwork bool) (*Result, error) {
 	workspace = resolve(workspace)
 	if info, err := os.Stat(workspace); err != nil || !info.IsDir() {
@@ -47,10 +53,36 @@ func Verify(ctx context.Context, lab *Lab, workspace string, seed int64, noNetwo
 		}
 	}
 	startClock := time.Now().UTC().Truncate(time.Second)
-	start := time.Now()
-	ceiling := time.Duration(capSeconds(lab.GenAI)) * time.Second
 	results := make([]CheckResult, 0, len(lab.Checks))
 	byID := map[string]CheckResult{}
+	var lock *os.File
+	busy := false
+	if lab.Cluster != "" {
+		lock, busy = clusterLock(lab.Cluster)
+	}
+	// Always, even after ORACLE_TOTAL_TIMEOUT or Ctrl-C: the objects of the
+	// cluster and of the engine made by the run. The verdict does not
+	// depend on it; never while another check holds the cluster.
+	defer func() {
+		if !busy {
+			cleanup(lab, workspace, seed, prefix, false)
+		}
+		if lock != nil {
+			lock.Close()
+		}
+	}()
+	// Another check works in the namespace (CLUSTER_BUSY): neither cleanup nor
+	// check. Cleanup of an interrupted previous run, outside the duration and
+	// the ceiling: objects left, no check runs, the verdict would be biased by
+	// an inherited state (CLUSTER_DIRTY).
+	dirty := false
+	if !busy {
+		for _, rc := range cleanup(lab, workspace, seed, prefix, true) {
+			dirty = dirty || rc != 0
+		}
+	}
+	start := time.Now()
+	ceiling := time.Duration(capSeconds(lab.GenAI)) * time.Second
 	for i := range lab.Checks {
 		c := &lab.Checks[i]
 		var blocker *string
@@ -66,6 +98,10 @@ func Verify(ctx context.Context, lab *Lab, workspace string, seed int64, noNetwo
 		left := ceiling - time.Since(start)
 		var r CheckResult
 		switch {
+		case busy:
+			r = outcome(c, statusError, ptr(codeClusterBusy), ptr(originPlatform), nil, nil, nil, 0)
+		case dirty:
+			r = outcome(c, statusError, ptr(codeClusterDirty), ptr(originPlatform), nil, nil, nil, 0)
 		case blocker != nil:
 			r = outcome(c, statusSkip, nil, nil, nil, nil, blocker, 0)
 		case left <= 0:
@@ -80,6 +116,7 @@ func Verify(ctx context.Context, lab *Lab, workspace string, seed int64, noNetwo
 		results = append(results, r)
 		byID[c.ID] = r
 	}
+	duration := time.Since(start).Milliseconds()
 
 	status, exit := statusPass, ExitPass
 	oracle, platform, failed := false, false, false
@@ -113,10 +150,10 @@ func Verify(ctx context.Context, lab *Lab, workspace string, seed int64, noNetwo
 		Session:      sessionLocal,
 		Seed:         seed,
 		Start:        startClock.Format("2006-01-02T15:04:05Z"),
-		DurationMS:   time.Since(start).Milliseconds(),
+		DurationMS:   duration,
 		Status:       status,
 		Exit:         exit,
 		Checks:       results,
-		Platform:     currentPlatform(),
+		Platform:     currentPlatform(lab.Docker),
 	}, nil
 }
