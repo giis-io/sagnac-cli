@@ -54,12 +54,21 @@ func TestVersionLockWaitIsBounded(t *testing.T) {
 		<-release
 	}))
 	defer srv.Close()
-	defer close(release)
 	old := VersionTimeout
 	VersionTimeout = 200 * time.Millisecond
-	defer func() { VersionTimeout = old }()
+	// The first command must be over before VersionTimeout is restored: it
+	// still reads it (data race found by go test -race).
+	done := make(chan struct{})
+	defer func() {
+		close(release)
+		<-done
+		VersionTimeout = old
+	}()
 	now := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
-	go LoadVersion(context.Background(), srv.URL, "1.2.3", now, false)
+	go func() {
+		defer close(done)
+		LoadVersion(context.Background(), srv.URL, "1.2.3", now, false)
+	}()
 	time.Sleep(50 * time.Millisecond)
 	start := time.Now()
 	st := LoadVersion(context.Background(), srv.URL, "1.2.3", now, false)
