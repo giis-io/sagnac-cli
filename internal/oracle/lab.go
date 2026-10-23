@@ -20,12 +20,28 @@ const (
 	accessExecute       = 1 // X_OK for syscall.Access
 )
 
-// capSeconds is the ceiling of one run: 60 s without GenAI, 240 s with.
+// capSeconds bounds timeout_s of one check: 60 s without GenAI, 240 s with.
+// It is also the ceiling of one run, except for a lab with a cluster and
+// GenAI (runCeilingSeconds).
 func capSeconds(genAI bool) int64 {
 	if genAI {
 		return 240
 	}
 	return 60
+}
+
+// clusterGenAICeilingSeconds is the ceiling of one run of a lab with a
+// cluster and GenAI: its checks start workloads on the cluster before they
+// can ask anything, and 240 s left no margin on a loaded machine.
+const clusterGenAICeilingSeconds = 360
+
+// runCeilingSeconds is the ceiling of one run of the lab (docs/contrat.md,
+// section 3): 60 s, 240 s with GenAI, 360 s with GenAI and a cluster.
+func runCeilingSeconds(lab *Lab) int64 {
+	if lab.GenAI && lab.Cluster != "" {
+		return clusterGenAICeilingSeconds
+	}
+	return capSeconds(lab.GenAI)
 }
 
 var (

@@ -91,7 +91,7 @@ func Verify(ctx context.Context, lab *Lab, workspace string, seed int64, noNetwo
 		}
 	}
 	start := time.Now()
-	ceiling := time.Duration(capSeconds(lab.GenAI)) * time.Second
+	ceiling := time.Duration(runCeilingSeconds(lab)) * time.Second
 	for i := range lab.Checks {
 		c := &lab.Checks[i]
 		var blocker *string

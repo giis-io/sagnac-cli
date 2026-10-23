@@ -465,3 +465,46 @@ func readFile(t *testing.T, p string) string {
 	}
 	return string(raw)
 }
+
+// The ceiling of a run is 60 s, 240 s with GenAI and 360 s with GenAI and a
+// cluster; timeout_s of a check stays within 240 s (docs/contrat.md, section 3).
+func TestRunCeiling(t *testing.T) {
+	genAI := strings.Replace(clusterMeta, "version: 1\n", "version: 1\ngenai: true\n", 1)
+	plain := "id: x\nversion: 1\nchecks:" + okCheck
+	cases := []struct {
+		name, meta string
+		cluster    bool
+		want       int64
+	}{
+		{"plain", plain, false, 60},
+		{"genai", strings.Replace(plain, "version: 1\n", "version: 1\ngenai: true\n", 1), false, 240},
+		{"cluster", clusterMeta, true, 60},
+		{"cluster and genai", genAI, true, 360},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var dir string
+			if c.cluster {
+				dir, _ = clusterFixture(t, c.meta, map[string]string{"one.sh": "sagnac_reussite"})
+			} else {
+				dir, _ = fixture(t, c.meta, map[string]string{"one.sh": "sagnac_reussite"}, "ONE_BAD")
+			}
+			if got := runCeilingSeconds(mustLoad(t, dir)); got != c.want {
+				t.Errorf("ceiling %d s, want %d s", got, c.want)
+			}
+		})
+	}
+	for _, c := range []struct {
+		timeout string
+		ok      bool
+	}{{"240", true}, {"241", false}, {"360", false}} {
+		meta := strings.Replace(genAI, "    preconditions: [CLUSTER_MISSING]\n",
+			"    preconditions: [CLUSTER_MISSING]\n    timeout_s: "+c.timeout+"\n", 1)
+		dir, _ := clusterFixture(t, meta, map[string]string{"one.sh": "sagnac_reussite"})
+		_, err := LoadLab(dir)
+		var kit *KitError
+		if c.ok != (err == nil) || (!c.ok && !errors.As(err, &kit)) {
+			t.Errorf("timeout_s %s with a cluster and GenAI: error %v, accepted %v", c.timeout, err, c.ok)
+		}
+	}
+}
