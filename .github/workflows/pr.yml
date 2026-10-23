@@ -1,7 +1,9 @@
-# Checks of a pull request. Runs on the runner group sagnac-cli-pr: disposable
-# VMs, one job each, limited to this repository. No token beyond reading the
-# code, no OIDC token, no secret; the workflows of outside contributors wait
-# for the approval of a maintainer. scripts/verifier-workflows.sh enforces
+# Checks of a pull request. Runs on disposable VMs, one job each. Until the
+# first public release, the repository is private and uses the runner group
+# giis-usine-lourd; the dedicated group sagnac-cli-pr, limited to this
+# repository, replaces it before the repository becomes public. No token
+# beyond reading the code, no OIDC token, no secret; the workflows of outside
+# contributors wait for the approval of a maintainer. scripts/verifier-workflows.sh enforces
 # these rules on every workflow of the repository.
 name: pr
 
@@ -24,8 +26,8 @@ jobs:
   workflows:
     name: workflows et scripts
     runs-on:
-      group: sagnac-cli-pr
-      labels: [self-hosted, linux, sagnac-cli-pr]
+      group: giis-usine-lourd
+      labels: [giis-usine-lourd]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,8 +39,8 @@ jobs:
   dco:
     name: certificat d'origine (DCO)
     runs-on:
-      group: sagnac-cli-pr
-      labels: [self-hosted, linux, sagnac-cli-pr]
+      group: giis-usine-lourd
+      labels: [giis-usine-lourd]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,8 +55,8 @@ jobs:
   go:
     name: vet, tests, vulnérabilités
     runs-on:
-      group: sagnac-cli-pr
-      labels: [self-hosted, linux, sagnac-cli-pr]
+      group: giis-usine-lourd
+      labels: [giis-usine-lourd]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
