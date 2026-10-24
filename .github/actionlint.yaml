@@ -2,3 +2,4 @@
 self-hosted-runner:
   labels:
     - sagnac-cli-pr
+    - giis-usine-lourd
