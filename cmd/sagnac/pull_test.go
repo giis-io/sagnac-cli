@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/giis-io/sagnac-cli/internal/account"
+	"github.com/giis-io/sagnac-cli/internal/api"
 	"github.com/giis-io/sagnac-cli/internal/i18n"
 )
 
@@ -79,6 +80,10 @@ type kitServer struct {
 	body       string
 	invalid    int // the next requests answer 401 INVALID_TOKEN
 	agents     []string
+	// limitBody: when not "", the download of an archive answers 429 with
+	// this body and the Retry-After limitAfter ("": none).
+	limitBody  string
+	limitAfter string
 }
 
 func (k *kitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -115,6 +120,15 @@ func (k *kitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) == 1 {
 		fmt.Fprintf(w, `{"lab": %q, "version": %d, "kit_sha256": %q}`, parts[0], k.version, pick(k.currentSum))
+		return
+	}
+	if k.limitBody != "" {
+		if k.limitAfter != "" {
+			w.Header().Set("Retry-After", k.limitAfter)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, k.limitBody)
 		return
 	}
 	w.Header().Set("Content-Type", "application/gzip")
@@ -486,5 +500,59 @@ func TestPullUnreadableDirectoryHasItsOwnMessage(t *testing.T) {
 	}
 	if got := p.kits.requested(); len(got) != 0 {
 		t.Errorf("requests sent: %v", got)
+	}
+}
+
+// S11 (3-4b): 30 different kits in 24 hours. The message gives the limit and
+// the local time of resumption (Retry-After); code 1, a refusal; one download
+// request only, nothing written.
+func TestPullKitDownloadLimit(t *testing.T) {
+	now := time.Date(2026, 10, 24, 11, 0, 0, 0, time.UTC) // 13:00 local
+	cases := []struct {
+		name, body, after string
+		want              []string
+	}{
+		{"limit and Retry-After", `{"code": "KIT_DOWNLOAD_LIMIT", "limit": 30}`, "5400",
+			[]string{i18n.T("pull.kit_limit", 30), i18n.T("pull.kit_limit_resume", i18n.T("resume.today", "14:30"))}},
+		{"tomorrow", `{"code": "KIT_DOWNLOAD_LIMIT", "limit": 30}`, "86400",
+			[]string{i18n.T("pull.kit_limit", 30), i18n.T("pull.kit_limit_resume", i18n.T("resume.date", "25/10/2026", "13:00"))}},
+		{"no limit field", `{"code": "KIT_DOWNLOAD_LIMIT"}`, "61",
+			[]string{i18n.T("pull.kit_limit_unknown"), i18n.T("pull.kit_limit_resume", i18n.T("resume.today", "13:02"))}},
+		{"no Retry-After", `{"code": "KIT_DOWNLOAD_LIMIT", "limit": 30}`, "",
+			[]string{i18n.T("pull.kit_limit", 30), i18n.T("pull.kit_limit_resume_later")}},
+	}
+	for _, c := range cases {
+		p := newPullRig(t)
+		withLocalZone(t, now)
+		p.kits.limitBody, p.kits.limitAfter = c.body, c.after
+		code, stdout, stderr := p.run(t, "pull", "hello")
+		if code != exitFailure || stdout != "" {
+			t.Errorf("%s: code %d, stdout %q, stderr %q", c.name, code, stdout, stderr)
+		}
+		for _, want := range c.want {
+			if !strings.Contains(stderr, want) {
+				t.Errorf("%s: stderr %q lacks %q", c.name, stderr, want)
+			}
+		}
+		downloads := 0
+		for _, path := range p.kits.requested() {
+			if path == "/v1/kits/hello/3" {
+				downloads++
+			}
+		}
+		if downloads != 1 {
+			t.Errorf("%s: %d download requests, want 1 (no new try)", c.name, downloads)
+		}
+		p.nothingWritten(t)
+	}
+}
+
+// The exit code of KIT_DOWNLOAD_LIMIT is a refusal, though its status is 429.
+func TestKitDownloadLimitIsARefusal(t *testing.T) {
+	if got := exitCodeOf(&api.APIError{Status: 429, Code: "KIT_DOWNLOAD_LIMIT"}); got != exitFailure {
+		t.Errorf("KIT_DOWNLOAD_LIMIT: code %d", got)
+	}
+	if got := exitCodeOf(&api.APIError{Status: 429, Code: "TOO_MANY_REQUESTS"}); got != exitEnvironment {
+		t.Errorf("TOO_MANY_REQUESTS: code %d", got)
 	}
 }

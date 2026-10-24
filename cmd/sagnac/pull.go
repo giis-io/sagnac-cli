@@ -23,6 +23,7 @@ const (
 	codeInsufficientScope   = "INSUFFICIENT_SCOPE"
 	codeInvalidToken        = "INVALID_TOKEN"
 	codeTooManyRequests     = "TOO_MANY_REQUESTS"
+	codeKitDownloadLimit    = "KIT_DOWNLOAD_LIMIT"
 	maxVersionArg           = 1 << 30
 )
 
@@ -208,7 +209,26 @@ func reportKitAPIError(w io.Writer, e *api.APIError, lab string, session bool) {
 		}
 	case codeInvalidToken:
 		fmt.Fprintln(w, loginAdvice(session))
+	case codeKitDownloadLimit:
+		reportKitLimit(w, e)
 	default:
 		fmt.Fprintln(w, i18n.T("error.unexpected_response"))
+	}
+}
+
+// reportKitLimit: the account took its limit of different kits over 24 hours
+// (docs/api/erreurs.md, KIT_DOWNLOAD_LIMIT). The limit and the local time of
+// resumption (Retry-After) are shown; no new try.
+func reportKitLimit(w io.Writer, e *api.APIError) {
+	if e.Limit > 0 {
+		fmt.Fprintln(w, i18n.T("pull.kit_limit", e.Limit))
+	} else {
+		fmt.Fprintln(w, i18n.T("pull.kit_limit_unknown"))
+	}
+	now := clock()
+	if at := resumeAt(e, now); !at.IsZero() {
+		fmt.Fprintln(w, i18n.T("pull.kit_limit_resume", resumeText(at, now)))
+	} else {
+		fmt.Fprintln(w, i18n.T("pull.kit_limit_resume_later"))
 	}
 }
