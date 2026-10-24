@@ -253,7 +253,7 @@ func TestDoctorWithoutToken(t *testing.T) {
 
 func TestDoctorRefusesArguments(t *testing.T) {
 	isolate(t, newVersionServer(t, fileOf("1.2.3")), day)
-	if code, _, _ := execute(t, "doctor", "--share"); code != exitUsage {
+	if code, _, _ := execute(t, "doctor", "--verbose"); code != exitUsage {
 		t.Errorf("exit code = %d, want 64", code)
 	}
 }

@@ -59,6 +59,7 @@ une étiquette de publication (`v0.1.0`), c'est l'étiquette exacte.
 | `sagnac check [LAB]` | Vérifie le dossier `workspace/` du lab, affiche le résultat et l'envoie à votre compte comme tentative déclarée. Sans réseau, le résultat attend dans `$XDG_STATE_HOME/sagnac/queue/` (30 jours). `--json` : le résultat en JSON. |
 | `sagnac purge` | Supprime les résultats en attente d'envoi. |
 | `sagnac doctor` | Signale une version plus récente, un avis de sécurité et la fin de support proche. Fonctionne sans compte. |
+| `sagnac doctor --share` | Fait le même diagnostic et envoie le rapport à Sagnac (`POST /v1/doctor/reports`, schéma `sagnac-doctor/1`) : version de `sagnac`, système, architecture, et pour chaque point un identifiant, un état et un code. Ni compte, ni jeton, ni chemin, ni nom d'utilisateur ou de poste. Affiche l'identifiant du rapport, à donner au support. Si l'envoi échoue, le rapport reste affiché : code 2 si la plateforme limite les envois ou ne répond pas, 3 si elle refuse le rapport. |
 | `sagnac version` | Affiche la version, la date de fin de support, l'éditeur et le contact sécurité. |
 | `sagnac help` | Affiche l'aide. |
 
