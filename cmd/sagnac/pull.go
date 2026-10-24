@@ -22,6 +22,7 @@ const (
 	codeUnknownLab          = "UNKNOWN_LAB"
 	codeInsufficientScope   = "INSUFFICIENT_SCOPE"
 	codeInvalidToken        = "INVALID_TOKEN"
+	codeTooManyRequests     = "TOO_MANY_REQUESTS"
 	maxVersionArg           = 1 << 30
 )
 

@@ -218,6 +218,13 @@ func openModule(ctx context.Context, client *account.Client, o openOptions, stdo
 			fmt.Fprintln(stderr, i18n.T("open.module_not_included"))
 			return exitCodeOf(apiErr)
 		}
+		if errors.As(err, &apiErr) && apiErr.Code == codeTooManyRequests && len(lines) > 0 {
+			// The instructions already received stay in the cache: they are listed.
+			fmt.Fprintln(stdout, i18n.T("open.module_partial", o.target, len(lines), len(labs)))
+			for _, line := range lines {
+				fmt.Fprintln(stdout, line)
+			}
+		}
 		if err != nil {
 			return reportOpenError(stderr, err, l.Lab, client.API, o.session)
 		}
@@ -263,6 +270,13 @@ func reportOpenError(w io.Writer, err error, target, apiURL string, session bool
 			}
 		case codeInvalidToken:
 			fmt.Fprintln(w, loginAdvice(session))
+		case codeTooManyRequests:
+			// Reading rate of the instructions: no new try, the time is shown.
+			if at := resumeAt(apiErr, clock()); !at.IsZero() {
+				fmt.Fprintln(w, i18n.T("open.rate_limited", resumeText(at, clock())))
+			} else {
+				fmt.Fprintln(w, i18n.T("open.rate_limited_later"))
+			}
 		default:
 			fmt.Fprintln(w, i18n.T("error.unexpected_response"))
 		}

@@ -55,7 +55,7 @@ une étiquette de publication (`v0.1.0`), c'est l'étiquette exacte.
 | `sagnac login` | Connecte cet ordinateur à votre compte (code à saisir dans le navigateur). Vide la file des résultats en attente et les copies hors ligne des énoncés laissées par la connexion précédente. |
 | `sagnac logout` | Déconnecte cet ordinateur, révoque ses jetons, vide la file des résultats en attente et supprime les copies hors ligne des énoncés. |
 | `sagnac pull LAB` | Télécharge le kit d'un lab dans le dossier courant et vérifie son empreinte. |
-| `sagnac open LAB` | Ouvre l'énoncé d'un lab et en garde une copie lisible hors ligne. |
+| `sagnac open LAB` | Ouvre l'énoncé d'un lab et en garde une copie lisible hors ligne. Si la plateforme limite la lecture des énoncés (trop de demandes, ou trop d'énoncés nouveaux sur 24 heures), la commande donne l'heure locale de reprise et s'arrête avec le code 2, sans nouvel essai ; les copies déjà récupérées restent lisibles. |
 | `sagnac check [LAB]` | Vérifie le dossier `workspace/` du lab, affiche le résultat et l'envoie à votre compte comme tentative déclarée. Sans réseau, le résultat attend dans `$XDG_STATE_HOME/sagnac/queue/` (30 jours). `--json` : le résultat en JSON. |
 | `sagnac purge` | Supprime les résultats en attente d'envoi. |
 | `sagnac doctor` | Signale une version plus récente, un avis de sécurité et la fin de support proche. Fonctionne sans compte. |
