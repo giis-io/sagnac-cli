@@ -85,15 +85,23 @@ expect 1 "refused in a .yaml file" "$here/verifier-workflows.sh" "$tmp/wf"
 # --- release.yml: the one workflow allowed to write and to sign --------------
 rel='name: release
 on:
-  push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      runner:
+        required: true
 permissions:
   contents: read
 jobs:
-  publish:
+  build:
+    if: ${{ startsWith(inputs.runner, '"'"'sagnac-release-'"'"') }}
     runs-on:
       group: giis-usine-lourd
       labels: [giis-usine-lourd]
+    steps:
+      - run: echo build
+  publish:
+    if: ${{ startsWith(inputs.runner, '"'"'sagnac-release-'"'"') }}
+    runs-on: ${{ inputs.runner }}
     environment: release
     permissions:
       contents: write
@@ -107,12 +115,20 @@ printf '%s\n' "$rel" >"$wf/release.yml"
 expect 0 "release.yml may write contents and request an OIDC token" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | sed 's/contents: write/packages: write/' >"$wf/release.yml"
 expect 1 "release.yml: another write permission" "$here/verifier-workflows.sh" "$tmp/wf"
-for bad in "  pull_request:" "  workflow_dispatch:" "  schedule:" "      - run: echo \${{ secrets.TOKEN }}"; do
+for bad in "  pull_request:" "  push:" "  schedule:" "      - run: echo \${{ secrets.TOKEN }}"; do
 	printf '%s\n%s\n' "$rel" "$bad" >"$wf/release.yml"
 	expect 1 "release.yml refused: $bad" "$here/verifier-workflows.sh" "$tmp/wf"
 done
-printf '%s\n' "$rel" | sed 's/tags: .*/branches: [main]/' >"$wf/release.yml"
-expect 1 "release.yml: a push that is not a tag" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | sed 's/    runs-on: ${{ inputs.runner }}/    runs-on:\n      group: giis-usine-lourd/' >"$wf/release.yml"
+expect 1 "release.yml: the writing job on the shared runners" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | sed 's/    runs-on: ${{ inputs.runner }}/    runs-on: ubuntu-latest/' >"$wf/release.yml"
+expect 1 "release.yml: the writing job not on the disposable runner" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | sed "s/startsWith(inputs.runner, 'sagnac-release-')/true/" >"$wf/release.yml"
+expect 1 "release.yml: no guard on the runner label" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | grep -v 'workflow_dispatch:' >"$wf/release.yml"
+expect 1 "release.yml: not started by hand" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | sed 's/^permissions:/permissions:\n  id-token: write/' >"$wf/release.yml"
+expect 1 "release.yml: a global write with a job on the shared runners" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | grep -v 'environment: release' >"$wf/release.yml"
 expect 1 "release.yml: no protected environment" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | sed 's/    runs-on:/    runs-on: ubuntu-24.04\n    x:/' >"$wf/release.yml"

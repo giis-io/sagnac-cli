@@ -1,24 +1,33 @@
-# Publication of a version, started by the push of a tag vMAJ.MIN.CORR (and by
-# nothing else: scripts/verifier-workflows.sh enforces it).
+# Publication of a version, started BY THE FOUNDER from his own machine:
 #
-# Two jobs. "build" has no right beyond reading the code and produces the
-# archives and SHA256SUMS. "publish" is the only job that can write: it signs
-# SHA256SUMS with cosign, keyless (the OIDC token of this run, certificate from
-# Sigstore), checks the signature it has just made, then creates the GitHub
-# release. The signing job builds nothing: it only handles the files of "build".
+#   SAGNAC_DEPOT=giis-io/sagnac-cli infra/usine/bin/runner-ephemere.sh executer release release.yml vX.Y.Z
 #
-# Both jobs run on the runner group of the factory (giis-usine-lourd, as the
-# pull request checks): GitHub-hosted runners are not used, and the repository
-# is private. The keyless signature works there too, the OIDC token comes from
-# GitHub. "publish" waits for the approval of the protected environment
-# "release" (Settings > Environments, required reviewer, tags v* only).
-# No secret is used; the Homebrew formula is produced as a release file and
-# copied to the tap by hand (CONTRIBUTING.md, "Publier une version").
+# (script of the academy repository, CONTRIBUTING.md, "Publier une version").
+# It draws a unique label sagnac-release-<date>-<random>, starts the workflow on
+# the tag with -f runner=<label>, waits for the approval of the environment
+# "release", then creates a disposable machine registered for this one job and
+# destroys it afterwards. Same procedure as the platform release. Nothing else
+# starts this workflow (scripts/verifier-workflows.sh enforces it).
+#
+# Two jobs. "build" has no right beyond reading the code; it runs on the
+# shared runners of the factory (giis-usine-lourd) and produces the archives
+# and SHA256SUMS. "publish" is the only job that can write or ask for an OIDC
+# token, and it runs on the disposable release runner only, never on the shared
+# ones: it signs SHA256SUMS with cosign, keyless (the OIDC token of this run),
+# checks the signature it has just made, then creates the GitHub release. It
+# builds nothing: it only handles the files of "build".
+#
+# GitHub-hosted runners are not used. No secret; the Homebrew formula is
+# produced as a release file and copied to the tap by hand.
 name: release
 
 on:
-  push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Unique label of the disposable release runner (given by runner-ephemere.sh executer)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -34,6 +43,7 @@ defaults:
 jobs:
   build:
     name: archives et sommes de contrôle
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && startsWith(inputs.runner, 'sagnac-release-') }}
     runs-on:
       group: giis-usine-lourd
       labels: [giis-usine-lourd]
@@ -85,10 +95,9 @@ jobs:
   publish:
     name: signature et publication
     needs: build
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && startsWith(inputs.runner, 'sagnac-release-') }}
     environment: release
-    runs-on:
-      group: giis-usine-lourd
-      labels: [giis-usine-lourd]
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 10
     permissions:
       contents: write # create the release
