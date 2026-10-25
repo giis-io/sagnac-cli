@@ -57,7 +57,9 @@ sur `main` ; le fichier `VERSION` doit déjà porter le même numéro.
 
 1. Fusionner la demande de fusion qui met `VERSION` à jour.
 2. Poser et pousser l'étiquette : `git tag v0.1.0 && git push origin v0.1.0`.
-3. Le workflow `.github/workflows/release.yml` construit les archives
+3. Le workflow `.github/workflows/release.yml` tourne sur les runners de l'usine
+   (groupe `giis-usine-lourd`) ; le job qui signe attend l'approbation de
+   l'environnement protégé `release`. Il construit les archives
    (`sagnac_<version>_<système>_<architecture>.tar.gz` pour `darwin` et `linux`,
    `arm64` et `amd64`), écrit `SHA256SUMS`, le signe avec cosign sans clé
    (`SHA256SUMS.sigstore.json`), vérifie la signature qu'il vient de faire, puis

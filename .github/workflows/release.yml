@@ -7,8 +7,11 @@
 # Sigstore), checks the signature it has just made, then creates the GitHub
 # release. The signing job builds nothing: it only handles the files of "build".
 #
-# Builds run on GitHub-hosted runners, not on the self-hosted group of the pull
-# request checks: the identity that signs must not depend on a runner we operate.
+# Both jobs run on the runner group of the factory (giis-usine-lourd, as the
+# pull request checks): GitHub-hosted runners are not used, and the repository
+# is private. The keyless signature works there too, the OIDC token comes from
+# GitHub. "publish" waits for the approval of the protected environment
+# "release" (Settings > Environments, required reviewer, tags v* only).
 # No secret is used; the Homebrew formula is produced as a release file and
 # copied to the tap by hand (CONTRIBUTING.md, "Publier une version").
 name: release
@@ -31,7 +34,9 @@ defaults:
 jobs:
   build:
     name: archives et sommes de contrôle
-    runs-on: ubuntu-24.04
+    runs-on:
+      group: giis-usine-lourd
+      labels: [giis-usine-lourd]
     timeout-minutes: 15
     permissions:
       contents: read
@@ -80,7 +85,10 @@ jobs:
   publish:
     name: signature et publication
     needs: build
-    runs-on: ubuntu-24.04
+    environment: release
+    runs-on:
+      group: giis-usine-lourd
+      labels: [giis-usine-lourd]
     timeout-minutes: 10
     permissions:
       contents: write # create the release

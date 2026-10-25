@@ -8,7 +8,10 @@
 # tag only (never a pull request, a manual run or a schedule) and may hold
 # the two permissions a signed release needs, contents: write (publish the
 # release) and id-token: write (the OIDC token of the cosign signature), as job
-# permissions; it still uses no secret and no unpinned action.
+# permissions, in a job that waits for the protected environment "release";
+# it still uses no secret and no unpinned action.
+# No workflow uses a GitHub-hosted runner (ubuntu-*, macos-*, windows-*): the
+# CI runs on the factory's runners only.
 # Usage: scripts/verifier-workflows.sh [REPOSITORY]   (0 clean, 1 refused)
 set -eu
 root=${1:-.}
@@ -37,7 +40,13 @@ for f in "$dir"/*.yml "$dir"/*.yaml; do
 		release=1
 		;;
 	esac
+	if grep -En 'runs-on:[[:space:]]*\[?[[:space:]]*"?(ubuntu|macos|windows)-' "$f" >/dev/null; then
+		refuse "$name" "runner hébergé par GitHub interdit : la CI tourne sur les runners de l'usine"
+	fi
 	if [ "$release" -eq 1 ]; then
+		if ! grep -Eq '^[[:space:]]+environment:[[:space:]]*release[[:space:]]*$' "$f"; then
+			refuse "$name" "le job qui signe doit utiliser l'environnement protégé release"
+		fi
 		# Nothing but the push of a tag starts a release.
 		if grep -En '^[[:space:]]*(pull_request|workflow_dispatch|schedule|issue_comment|release|repository_dispatch):' "$f" >/dev/null; then
 			refuse "$name" "seul le push d'une étiquette de version peut lancer une publication"

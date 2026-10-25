@@ -91,7 +91,10 @@ permissions:
   contents: read
 jobs:
   publish:
-    runs-on: ubuntu-24.04
+    runs-on:
+      group: giis-usine-lourd
+      labels: [giis-usine-lourd]
+    environment: release
     permissions:
       contents: write
       id-token: write
@@ -110,7 +113,13 @@ for bad in "  pull_request:" "  workflow_dispatch:" "  schedule:" "      - run: 
 done
 printf '%s\n' "$rel" | sed 's/tags: .*/branches: [main]/' >"$wf/release.yml"
 expect 1 "release.yml: a push that is not a tag" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | grep -v 'environment: release' >"$wf/release.yml"
+expect 1 "release.yml: no protected environment" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | sed 's/    runs-on:/    runs-on: ubuntu-24.04\n    x:/' >"$wf/release.yml"
+expect 1 "release.yml: GitHub-hosted runner" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" >"$wf/release.yml"
+printf '%s\n' "$good" | sed 's/runs-on: \[self-hosted\]/runs-on: macos-14/' >"$wf/pr.yml"
+expect 1 "pr.yml: GitHub-hosted runner" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n  id-token: write\n' "$good" >"$wf/pr.yml"
 expect 1 "id-token stays forbidden in pr.yml" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n  contents: write\n' "$good" >"$wf/pr.yml"
