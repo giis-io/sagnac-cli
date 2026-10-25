@@ -1,0 +1,41 @@
+# Homebrew formula of sagnac. scripts/formule-homebrew.sh fills the @...@
+# values from the SHA256SUMS of a release; the result goes to Formula/sagnac.rb
+# of the tap giis-io/homebrew-tap. Every release archive is checked by its
+# SHA-256 here, and SHA256SUMS itself carries a cosign signature
+# (README.md, "Installer").
+class Sagnac < Formula
+  desc "Command line of the Sagnac training platform"
+  homepage "https://github.com/giis-io/sagnac-cli"
+  version "@VERSION@"
+  license "Apache-2.0"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/giis-io/sagnac-cli/releases/download/v@VERSION@/sagnac_@VERSION@_darwin_arm64.tar.gz"
+      sha256 "@SHA_DARWIN_ARM64@"
+    end
+    on_intel do
+      url "https://github.com/giis-io/sagnac-cli/releases/download/v@VERSION@/sagnac_@VERSION@_darwin_amd64.tar.gz"
+      sha256 "@SHA_DARWIN_AMD64@"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/giis-io/sagnac-cli/releases/download/v@VERSION@/sagnac_@VERSION@_linux_arm64.tar.gz"
+      sha256 "@SHA_LINUX_ARM64@"
+    end
+    on_intel do
+      url "https://github.com/giis-io/sagnac-cli/releases/download/v@VERSION@/sagnac_@VERSION@_linux_amd64.tar.gz"
+      sha256 "@SHA_LINUX_AMD64@"
+    end
+  end
+
+  def install
+    bin.install "sagnac"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/sagnac version")
+  end
+end

@@ -7,13 +7,84 @@
 `sagnac` est la ligne de commande de la formation Sagnac. Elle s'installe sur le
 poste de l'élève, lance les vérifications d'un lab et affiche le résultat.
 
-Disponibles : `login`, `logout`, `pull`, `open`, `check`, `purge`, `doctor`, `version`, `help`.
+Disponibles : `login`, `logout`, `pull`, `open`, `check`, `clean`, `purge`, `doctor`, `version`, `help`.
 Les commandes `submit` et `update` arrivent ensuite.
 
-## Installer depuis les sources
+## Installer
 
-Il n'existe pas encore de binaire publié : on construit `sagnac` soi-même, depuis
-un clone du dépôt. Il faut Go 1.26.10 (version fixée dans `go.mod`) et `make`.
+Aucune version n'est encore publiée. À partir de la première, chaque version
+est publiée sur la page des versions du dépôt avec ses sommes de contrôle
+SHA-256 (`SHA256SUMS`) et une signature de ce fichier. Aucune méthode
+d'installation de `sagnac` ne passe par `curl ... | sudo bash`, et vous ne
+devez en accepter aucune qui le demande : un programme installé avec `sudo`
+sans avoir été lu ni vérifié a tous les droits sur votre machine.
+
+### Homebrew (macOS et Linux)
+
+```
+brew install giis-io/tap/sagnac
+```
+
+Homebrew télécharge l'archive de votre plateforme et refuse de l'installer si
+sa somme SHA-256 n'est pas celle de la formule. Aucun droit administrateur
+n'est nécessaire. La formule est dans `packaging/homebrew/sagnac.rb.in`.
+
+### Téléchargement vérifié
+
+Les commandes ci-dessous n'utilisent pas `sudo` : le binaire va dans
+`~/.local/bin`. Choisissez la version, le système (`darwin` ou `linux`) et
+l'architecture (`arm64` ou `amd64`, `uname -m`).
+
+```
+VERSION=0.1.0
+OS=darwin
+ARCH=arm64
+BASE=https://github.com/giis-io/sagnac-cli/releases/download/v$VERSION
+curl -fsSLO "$BASE/sagnac_${VERSION}_${OS}_${ARCH}.tar.gz"
+curl -fsSLO "$BASE/SHA256SUMS"
+curl -fsSLO "$BASE/SHA256SUMS.sigstore.json"
+```
+
+1. Vérifiez que `SHA256SUMS` a été signé par le workflow de publication de ce
+   dépôt (signature « keyless » de [cosign](https://docs.sigstore.dev/cosign/installation/),
+   sans clé à gérer : l'identité est celle du workflow GitHub Actions) :
+
+   ```
+   cosign verify-blob \
+     --bundle SHA256SUMS.sigstore.json \
+     --certificate-identity "https://github.com/giis-io/sagnac-cli/.github/workflows/release.yml@refs/tags/v$VERSION" \
+     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+     SHA256SUMS
+   ```
+
+   La réponse attendue est `Verified OK`. Toute autre réponse : n'installez pas.
+
+2. Vérifiez la somme de l'archive (Linux, puis macOS) :
+
+   ```
+   grep "  sagnac_${VERSION}_${OS}_${ARCH}.tar.gz\$" SHA256SUMS | sha256sum -c -
+   grep "  sagnac_${VERSION}_${OS}_${ARCH}.tar.gz\$" SHA256SUMS | shasum -a 256 -c -
+   ```
+
+   La réponse attendue est `...tar.gz: OK` (ou `: Réussi` selon la langue).
+
+3. Installez, sans `sudo` :
+
+   ```
+   tar -xzf "sagnac_${VERSION}_${OS}_${ARCH}.tar.gz" sagnac
+   install -d ~/.local/bin
+   install -m 0755 sagnac ~/.local/bin/sagnac
+   sagnac version
+   ```
+
+   `~/.local/bin` doit être dans votre `PATH`. Sans `cosign`, l'étape 2 seule
+   garantit que l'archive est celle du fichier `SHA256SUMS` téléchargé ; seule
+   l'étape 1 garantit que ce fichier vient de GIIS.
+
+### Depuis les sources
+
+On construit `sagnac` soi-même, depuis un clone du dépôt. Il faut Go 1.26.10
+(version fixée dans `go.mod`) et `make`.
 
 ```
 make build
@@ -24,13 +95,6 @@ make build
 (par exemple `~/.local/bin`). Un simple `go build` ne convient pas : il laisse
 vides la date de fin de support et les coordonnées de l'éditeur, et `sagnac`
 refuse alors de démarrer.
-
-## Binaires publiés, plus tard
-
-Quand les binaires seront publiés, chacun sera accompagné de sa somme SHA-256 et
-d'une signature ; la page de téléchargement dira comment les vérifier. Cette
-vérification n'existe pas encore : n'installez pas un binaire dont vous ne
-connaissez pas l'origine.
 
 ## Kits de labs
 
@@ -57,6 +121,8 @@ une étiquette de publication (`v0.1.0`), c'est l'étiquette exacte.
 | `sagnac pull LAB` | Télécharge le kit d'un lab dans le dossier courant et vérifie son empreinte. |
 | `sagnac open LAB` | Ouvre l'énoncé d'un lab et en garde une copie lisible hors ligne. |
 | `sagnac check [LAB]` | Vérifie le dossier `workspace/` du lab, affiche le résultat et l'envoie à votre compte comme tentative déclarée. Sans réseau, le résultat attend dans `$XDG_STATE_HOME/sagnac/queue/` (30 jours). `--json` : le résultat en JSON. |
+| `sagnac check --show-payload` | Lance les contrôles, puis affiche les deux requêtes que `sagnac check` enverrait à la plateforme (`POST /v1/sessions`, `POST /v1/attempts`), en-têtes et corps compris, sans rien envoyer ni contacter. Le jeton n'est jamais affiché. Voir `docs/contrat.md`, section 4 bis. |
+| `sagnac clean [--all] [--dry-run]` | Supprime le cluster du lab courant (tous les clusters avec `--all`) et les fichiers temporaires du cache de Sagnac. Garde les modèles, les outils, les images de base, votre `workspace/` et les résultats en attente. `--dry-run` affiche ce qui serait supprimé. Voir `docs/contrat.md`, section 5 bis. |
 | `sagnac purge` | Supprime les résultats en attente d'envoi. |
 | `sagnac doctor` | Signale une version plus récente, un avis de sécurité et la fin de support proche. Fonctionne sans compte. |
 | `sagnac version` | Affiche la version, la date de fin de support, l'éditeur et le contact sécurité. |
@@ -79,6 +145,17 @@ la sortie d'erreur à chaque lancement, sans changer le code de sortie. L'aide
 (`sagnac help`, `-h`, aucune commande) et les commandes inconnues répondent tout
 de suite : elles lisent la copie gardée, sans interroger le réseau.
 
+## Ce que `sagnac check` envoie
+
+Connecté, `sagnac check` envoie deux requêtes à la plateforme : `POST /v1/sessions`
+(le lab, sa version et l'empreinte de ses contrôles, pour obtenir une graine) puis
+`POST /v1/attempts` (le résultat : verdict ; pour chaque contrôle, son identifiant, son
+statut, son code d'échec et les valeurs typées qu'il a relevées ; durées, graine, empreinte
+des contrôles, système, architecture, moteur de conteneurs et version de la CLI).
+Aucun fichier de votre espace de
+travail n'y figure. `sagnac check --show-payload` les affiche exactement, sans
+rien envoyer.
+
 L'option `--lang` choisit la langue des messages. Sans elle, `sagnac` lit
 `LC_ALL`, `LC_MESSAGES` puis `LANG`. Le français est la langue de référence et
 le repli pour toute langue absente.
@@ -86,7 +163,7 @@ le repli pour toute langue absente.
 ## Codes de sortie
 
 Mêmes codes pour toutes les commandes (`login`, `logout`, `pull`, `open`,
-`check`, `purge`, `doctor`, `version`, `help`) :
+`check`, `clean`, `purge`, `doctor`, `version`, `help`) :
 
 | Code | Sens |
 |---|---|

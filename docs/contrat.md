@@ -96,7 +96,23 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
   (`ORACLE_UNDECLARED_CODE`), contrôle tué par une interruption
   (`ORACLE_CHECK_INTERRUPTED`).
 - **Plafond.** 60 s par passage, 240 s pour un lab GenAI ; au-delà, les
-  contrôles restants rendent `ORACLE_TOTAL_TIMEOUT`.
+  contrôles restants rendent `ORACLE_TOTAL_TIMEOUT`. Le plafond ne compte que
+  les contrôles : il démarre après l'attente des services ci-dessous.
+- **Attente des services.** Avant le plafond, et avant de demander la session
+  au serveur, `check` attend que les services du lab répondent, 180 s au plus.
+  Aujourd'hui, le seul service est le cluster que déclare la clé `cluster` de
+  `meta.yaml`, et il est prêt quand son API répond à `/readyz` avec
+  l'identité « contrôle » (`<cache>/clusters/<nom>/kubeconfig`, jamais
+  l'administrateur), comme `sagnac-cluster status`. La sonde est reprise toutes
+  les 2 s (`api_prete` du cadre) ; un service qui a répondu n'est plus sondé.
+  Un cluster qui n'a jamais été créé (pas de `kubeconfig` dans le cache) n'est
+  pas attendu : attendre ne le créerait pas, et les contrôles rendent tout de
+  suite la précondition « cluster absent » (`CLUSTER_MISSING`, code 2). Si le
+  délai est dépassé, les contrôles s'exécutent quand même et rendent leurs
+  propres préconditions, comme sans attente ; l'attente n'est jamais un
+  verdict. Ctrl-C pendant l'attente rend 130 sans verdict. L'attente n'entre ni
+  dans le plafond ni dans `duration_ms`. Les messages vont sur la sortie
+  d'erreur.
 - **Graine.** `SAGNAC_SEED` vient du serveur quand l'élève est connecté (une
   graine par passage), sinon d'un tirage local. Les valeurs que l'élève doit
   produire en dérivent.
@@ -162,6 +178,21 @@ Le délai de `Retry-After` (secondes) est affiché, jamais attendu : la limite
 de la plateforme se compte par heure, et `check` ne bloque pas l'élève pour un
 envoi.
 
+### Voir ce qui est envoyé
+
+`sagnac check --show-payload` lance les contrôles ici, avec une graine locale,
+puis affiche les deux requêtes qu'un `sagnac check` connecté enverrait
+(`POST /v1/sessions`, `POST /v1/attempts`) : méthode, adresse, en-têtes et
+corps. Il ne contacte personne : ni session, ni envoi, ni connexion, ni file,
+et pas même la lecture quotidienne du fichier de version. Les requêtes sont
+construites par le code qui les envoie (`internal/attempt`) : mêmes en-têtes,
+même corps, octet pour octet, hors ce que seul le serveur ou l'horloge décide
+(`session` et `seed` du résultat, `started_at`, durées). Le jeton n'est jamais
+affiché (`Authorization: Bearer <jeton de votre connexion>`), ni la clé
+d'idempotence, tirée au moment de l'envoi. `--json` donne `{"requests": [...]}`
+sur la sortie standard. `--session` est refusé avec cette option (code 64). Le
+code de sortie est celui de l'oracle.
+
 ## 5. Codes de sortie
 
 Mêmes codes pour toutes les commandes :
@@ -185,6 +216,35 @@ script qui enchaîne `sagnac check` doit pouvoir s'y fier quel que soit l'état
 de la plateforme ; le 429 se lit dans le message. Les autres commandes rendent
 2 sur un 429, comme sur un 5xx : l'opération n'a pas eu lieu et ne dépend pas
 d'une action de l'élève.
+
+## 5 bis. `sagnac clean`
+
+`sagnac clean` supprime le cluster du lab courant (celui que déclare la clé
+`cluster` de son `meta.yaml`) et les fichiers laissés à moitié écrits par un
+téléchargement ou une copie interrompus (`*.partiel.<pid>` dans le cache,
+`.workspace.partiel.<pid>` dans le lab). `--all` vise tous les clusters du cache
+et tous les labs du dossier courant ; `--dry-run` affiche ce qui serait supprimé
+sans rien supprimer.
+
+- **Même effet que le cadre.** Le cluster est supprimé par le script du kit,
+  `_cadre/bin/sagnac-cluster delete <nom>`, le même que `make cluster-delete` :
+  la CLI ne refait pas la suppression des conteneurs, du réseau et des volumes
+  du cluster. Sans ce script, le cluster est signalé (code 1) et son dossier
+  d'état est gardé : le supprimer seul laisserait le cluster sans moyen de
+  l'atteindre.
+- **Gardé.** Modèles, binaires des outils, images de base (`$SAGNAC_CACHE`, sinon
+  `$HOME/.cache/sagnac`, comme le cadre : `XDG_CACHE_HOME` est ignoré), le
+  dossier `workspace/` de l'élève et la file des résultats en attente. À la
+  différence de `make clean`, `sagnac clean` ne supprime jamais `workspace/`.
+- **Chemins.** Le cache est résolu (liens suivis) et doit être absolu ; la
+  racine, le dossier personnel et tout dossier qui le contient sont refusés, de
+  même qu'un chemin vide ou relatif, et un nom de cluster hors de
+  `[a-z0-9][a-z0-9-]*`. Un lien symbolique du cache n'est jamais suivi. Chaque
+  fichier temporaire est vérifié un à un avant sa suppression : rien n'est
+  supprimé hors du cache de Sagnac ou du dossier du lab.
+- **Codes.** 0 réussite ; 1 chemin refusé ou script du kit introuvable ; 2
+  suppression du cluster impossible (moteur de conteneurs arrêté) ; 3 erreur
+  de stockage ; 64 mauvaise utilisation ; 130 interruption.
 
 ## 6. Messages
 

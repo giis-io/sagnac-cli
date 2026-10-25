@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -37,6 +38,13 @@ func main() {
 // at most); every other launch reads the cache only.
 var networkCommands = map[string]bool{
 	"version": true, "purge": true, "login": true, "logout": true, "pull": true, "open": true, "check": true,
+}
+
+// offline reports a launch that must not touch the network at all, not even
+// for the daily read of the version file: check --show-payload promises to
+// contact nobody.
+func offline(command string, args []string) bool {
+	return command == "check" && slices.Contains(args, showPayloadOption)
 }
 
 // run executes the command line and returns the exit code. Ctrl-C and
@@ -89,7 +97,7 @@ func dispatch(ctx context.Context, args []string, getenv func(string) string, st
 	// never change the exit code. Help and unknown commands answer at once:
 	// they read the cache only, never the network.
 	startupNotices(ctx, noticePlan{
-		network:     !parsed.help && networkCommands[command],
+		network:     !parsed.help && networkCommands[command] && !offline(command, parsed.rest[1:]),
 		ownSupport:  !parsed.help && command == "version",
 		ownVersions: !parsed.help && command == "doctor",
 	}, stderr)
@@ -123,6 +131,8 @@ func dispatch(ctx context.Context, args []string, getenv func(string) string, st
 		return runOpen(ctx, parsed.rest[1:], stdout, stderr), command
 	case "check":
 		return runCheck(ctx, parsed.rest[1:], stdout, stderr), command
+	case "clean":
+		return runClean(ctx, parsed.rest[1:], stdout, stderr), command
 	default:
 		fmt.Fprintln(stderr, i18n.T("error.unknown_command", command))
 		return exitCodeOf(errUsage), command

@@ -50,6 +50,46 @@ La CI relance ces commandes sur chaque demande de fusion
 (`.github/workflows/pr.yml`). Pour une première contribution, un mainteneur
 approuve le lancement des workflows avant qu'ils tournent.
 
+## Publier une version
+
+Réservé aux mainteneurs. Une version naît d'une étiquette `vMAJ.MIN.CORR` posée
+sur `main` ; le fichier `VERSION` doit déjà porter le même numéro.
+
+1. Fusionner la demande de fusion qui met `VERSION` à jour.
+2. Poser et pousser l'étiquette : `git tag v0.1.0 && git push origin v0.1.0`.
+3. Depuis le poste du fondateur, dans un clone du dépôt académie (même
+   procédure que la release de la plateforme), avec un jeton GitHub à grain fin
+   limité à `giis-io/sagnac-cli` (« Administration » et « Actions » en
+   écriture), créé juste avant et révoqué juste après :
+
+   ```
+   SAGNAC_DEPOT=giis-io/sagnac-cli infra/usine/bin/runner-ephemere.sh executer release release.yml v0.1.0
+   ```
+
+   Le script tire une étiquette unique `sagnac-release-<date>-<aléa>`, lance
+   `.github/workflows/release.yml` sur l'étiquette avec `-f runner=<étiquette>`,
+   attend l'approbation de l'environnement `release` (à approuver sur GitHub),
+   crée alors une machine jetable enregistrée pour ce seul job, puis la détruit.
+4. Le job `build`, en lecture seule, tourne sur le groupe `giis-usine-lourd` et
+   produit les archives (`sagnac_<version>_<système>_<architecture>.tar.gz` pour
+   `darwin` et `linux`, `arm64` et `amd64`) et `SHA256SUMS`. Le job `publish`,
+   sur la machine jetable seulement, signe `SHA256SUMS` avec cosign sans clé
+   (`SHA256SUMS.sigstore.json`), vérifie la signature qu'il vient de faire, puis
+   crée la page de la version avec ces fichiers et la formule `sagnac.rb`.
+5. Copier `sagnac.rb` dans `Formula/sagnac.rb` du dépôt `giis-io/homebrew-tap`,
+   puis `brew audit --strict --online giis-io/tap/sagnac`.
+
+Prérequis : l'environnement `release` existe sur `giis-io/sagnac-cli` (reviewer
+requis, étiquettes `v*` seulement) et la machine jetable dispose de `gh` et de
+`curl`.
+
+Le workflow n'utilise aucun secret. Seul `release.yml` peut écrire dans le dépôt
+et demander un jeton OIDC, et seulement sur le runner jetable :
+`scripts/verifier-workflows.sh` refuse ces droits ailleurs, refuse à tout job
+qui les demande de tourner sur `giis-usine-lourd`, et refuse à `release.yml`
+tout autre déclencheur que le lancement manuel. Pour vérifier une version à la
+main, voir « Installer » dans `README.md`.
+
 ## Certificat d'origine (DCO)
 
 Chaque commit porte une ligne `Signed-off-by` à votre nom, avec l'adresse de

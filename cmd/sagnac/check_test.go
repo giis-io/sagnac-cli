@@ -66,7 +66,8 @@ type platform struct {
 	sessionAgents []string
 	attempts      []sentAttempt
 	stored        map[string]bool
-	onAttempt     func() // called without the lock when an attempt arrives
+	onAttempt     func()                 // called without the lock when an attempt arrives
+	headers       map[string]http.Header // headers of the last request, by path
 }
 
 func (p *platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +79,10 @@ func (p *platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer p.mu.Unlock()
 	var body map[string]any
 	_ = json.Unmarshal(raw, &body)
+	if p.headers == nil {
+		p.headers = map[string]http.Header{}
+	}
+	p.headers[r.URL.Path] = r.Header.Clone()
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
 	case "/v1/sessions":
