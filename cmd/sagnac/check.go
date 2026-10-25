@@ -182,6 +182,11 @@ func runCheck(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		fmt.Fprintln(stderr, i18n.T("check.invalid_kit", "checks/"))
 		return exitCodeOf(err)
 	}
+	// The services of the lab (its cluster) are waited for here, before the
+	// session is asked for and before the ceiling of the checks starts.
+	if code, stop := waitForServices(ctx, lab, stderr); stop {
+		return code
+	}
 	// The device flow of --session prints on stdout; with --json, stdout is
 	// the result alone.
 	loginOut := stdout

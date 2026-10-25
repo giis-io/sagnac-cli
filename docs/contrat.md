@@ -96,7 +96,23 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
   (`ORACLE_UNDECLARED_CODE`), contrôle tué par une interruption
   (`ORACLE_CHECK_INTERRUPTED`).
 - **Plafond.** 60 s par passage, 240 s pour un lab GenAI ; au-delà, les
-  contrôles restants rendent `ORACLE_TOTAL_TIMEOUT`.
+  contrôles restants rendent `ORACLE_TOTAL_TIMEOUT`. Le plafond ne compte que
+  les contrôles : il démarre après l'attente des services ci-dessous.
+- **Attente des services.** Avant le plafond, et avant de demander la session
+  au serveur, `check` attend que les services du lab répondent, 180 s au plus.
+  Aujourd'hui, le seul service est le cluster que déclare la clé `cluster` de
+  `meta.yaml`, et il est prêt quand son API répond à `/readyz` avec
+  l'identité « contrôle » (`<cache>/clusters/<nom>/kubeconfig`, jamais
+  l'administrateur), comme `sagnac-cluster status`. La sonde est reprise toutes
+  les 2 s (`api_prete` du cadre) ; un service qui a répondu n'est plus sondé.
+  Un cluster qui n'a jamais été créé (pas de `kubeconfig` dans le cache) n'est
+  pas attendu : attendre ne le créerait pas, et les contrôles rendent tout de
+  suite la précondition « cluster absent » (`CLUSTER_MISSING`, code 2). Si le
+  délai est dépassé, les contrôles s'exécutent quand même et rendent leurs
+  propres préconditions, comme sans attente ; l'attente n'est jamais un
+  verdict. Ctrl-C pendant l'attente rend 130 sans verdict. L'attente n'entre ni
+  dans le plafond ni dans `duration_ms`. Les messages vont sur la sortie
+  d'erreur.
 - **Graine.** `SAGNAC_SEED` vient du serveur quand l'élève est connecté (une
   graine par passage), sinon d'un tirage local. Les valeurs que l'élève doit
   produire en dérivent.

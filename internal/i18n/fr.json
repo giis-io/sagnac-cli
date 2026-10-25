@@ -159,5 +159,8 @@
   "clean.unsafe": "Refusé : « sagnac clean » ne supprime rien hors du cache de Sagnac, et le chemin du cache (SAGNAC_CACHE) ou le nom d'un cluster est vide, relatif ou trop large.",
   "clean.no_cache": "Le dossier du cache de Sagnac est introuvable : HOME et SAGNAC_CACHE sont vides. Rien n'est supprimé.",
   "clean.ignored_link": "Ignoré, c'est un lien symbolique : %s",
-  "clean.failed": "Un fichier temporaire n'a pas pu être supprimé (%s). Vérifiez les droits du dossier."
+  "clean.failed": "Un fichier temporaire n'a pas pu être supprimé (%s). Vérifiez les droits du dossier.",
+  "check.waiting": "En attente du démarrage des services du lab (%s), %d s au plus. Cette attente ne compte pas dans le temps imparti à la vérification.",
+  "check.ready_after": "Services prêts après %d s. La vérification commence.",
+  "check.ready_timeout": "Les services du lab (%s) ne répondent toujours pas après %d s. La vérification commence quand même ; si elle signale un élément manquant, relancez « make setup » dans le dossier du lab."
 }
