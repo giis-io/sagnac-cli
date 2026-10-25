@@ -186,6 +186,35 @@ de la plateforme ; le 429 se lit dans le message. Les autres commandes rendent
 2 sur un 429, comme sur un 5xx : l'opération n'a pas eu lieu et ne dépend pas
 d'une action de l'élève.
 
+## 5 bis. `sagnac clean`
+
+`sagnac clean` supprime le cluster du lab courant (celui que déclare la clé
+`cluster` de son `meta.yaml`) et les fichiers laissés à moitié écrits par un
+téléchargement ou une copie interrompus (`*.partiel.<pid>` dans le cache,
+`.workspace.partiel.<pid>` dans le lab). `--all` vise tous les clusters du cache
+et tous les labs du dossier courant ; `--dry-run` affiche ce qui serait supprimé
+sans rien supprimer.
+
+- **Même effet que le cadre.** Le cluster est supprimé par le script du kit,
+  `_cadre/bin/sagnac-cluster delete <nom>`, le même que `make cluster-delete` :
+  la CLI ne refait pas la suppression des conteneurs, du réseau et des volumes
+  du cluster. Sans ce script, le cluster est signalé (code 1) et son dossier
+  d'état est gardé : le supprimer seul laisserait le cluster sans moyen de
+  l'atteindre.
+- **Gardé.** Modèles, binaires des outils, images de base (`$SAGNAC_CACHE`, sinon
+  `$HOME/.cache/sagnac`, comme le cadre : `XDG_CACHE_HOME` est ignoré), le
+  dossier `workspace/` de l'élève et la file des résultats en attente. À la
+  différence de `make clean`, `sagnac clean` ne supprime jamais `workspace/`.
+- **Chemins.** Le cache est résolu (liens suivis) et doit être absolu ; la
+  racine, le dossier personnel et tout dossier qui le contient sont refusés, de
+  même qu'un chemin vide ou relatif, et un nom de cluster hors de
+  `[a-z0-9][a-z0-9-]*`. Un lien symbolique du cache n'est jamais suivi. Chaque
+  fichier temporaire est vérifié un à un avant sa suppression : rien n'est
+  supprimé hors du cache de Sagnac ou du dossier du lab.
+- **Codes.** 0 réussite ; 1 chemin refusé ou script du kit introuvable ; 2
+  suppression du cluster impossible (moteur de conteneurs arrêté) ; 3 erreur
+  de stockage ; 64 mauvaise utilisation ; 130 interruption.
+
 ## 6. Messages
 
 Le message d'un code est lu dans `<lab>/checks/messages/<langue>/<CODE>.txt`,

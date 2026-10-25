@@ -7,7 +7,7 @@
 `sagnac` est la ligne de commande de la formation Sagnac. Elle s'installe sur le
 poste de l'élève, lance les vérifications d'un lab et affiche le résultat.
 
-Disponibles : `login`, `logout`, `pull`, `open`, `check`, `purge`, `doctor`, `version`, `help`.
+Disponibles : `login`, `logout`, `pull`, `open`, `check`, `clean`, `purge`, `doctor`, `version`, `help`.
 Les commandes `submit` et `update` arrivent ensuite.
 
 ## Installer depuis les sources
@@ -57,6 +57,7 @@ une étiquette de publication (`v0.1.0`), c'est l'étiquette exacte.
 | `sagnac pull LAB` | Télécharge le kit d'un lab dans le dossier courant et vérifie son empreinte. |
 | `sagnac open LAB` | Ouvre l'énoncé d'un lab et en garde une copie lisible hors ligne. |
 | `sagnac check [LAB]` | Vérifie le dossier `workspace/` du lab, affiche le résultat et l'envoie à votre compte comme tentative déclarée. Sans réseau, le résultat attend dans `$XDG_STATE_HOME/sagnac/queue/` (30 jours). `--json` : le résultat en JSON. |
+| `sagnac clean [--all] [--dry-run]` | Supprime le cluster du lab courant (tous les clusters avec `--all`) et les fichiers temporaires du cache de Sagnac. Garde les modèles, les outils, les images de base, votre `workspace/` et les résultats en attente. `--dry-run` affiche ce qui serait supprimé. Voir `docs/contrat.md`, section 5 bis. |
 | `sagnac purge` | Supprime les résultats en attente d'envoi. |
 | `sagnac doctor` | Signale une version plus récente, un avis de sécurité et la fin de support proche. Fonctionne sans compte. |
 | `sagnac version` | Affiche la version, la date de fin de support, l'éditeur et le contact sécurité. |
@@ -86,7 +87,7 @@ le repli pour toute langue absente.
 ## Codes de sortie
 
 Mêmes codes pour toutes les commandes (`login`, `logout`, `pull`, `open`,
-`check`, `purge`, `doctor`, `version`, `help`) :
+`check`, `clean`, `purge`, `doctor`, `version`, `help`) :
 
 | Code | Sens |
 |---|---|

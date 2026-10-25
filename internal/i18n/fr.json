@@ -1,5 +1,5 @@
 {
-  "usage": "Utilisation : sagnac [--lang LANGUE] <commande>\n\nCommandes :\n  login      Connecte cet ordinateur à votre compte.\n  logout     Déconnecte cet ordinateur et révoque ses jetons.\n  pull LAB   Télécharge le kit d'un lab dans le dossier courant.\n  open CIBLE Ouvre l'énoncé d'un lab, ou enregistre ceux d'un module pour la lecture hors ligne.\n  check [LAB] Vérifie votre travail dans le dossier workspace/ du lab et envoie le résultat à votre compte.\n  doctor     Vérifie la version, les avis de sécurité et la fin de support.\n  purge      Supprime les résultats en attente d'envoi sur cet ordinateur.\n  version    Affiche la version, la fin de support et le contact sécurité.\n  help       Affiche cette aide (aussi : -h, --help).\n\nOptions :\n  --lang LANGUE   Langue des messages (fr).\n  --version N     Avec pull : version du lab (par défaut, la version courante).\n  --text          Avec open : affiche l'énoncé d'un lab dans le terminal.\n  --json          Avec check : affiche le résultat en JSON, sans autre texte sur la sortie standard.\n  --session       Avec pull, open ou check : connexion gardée en mémoire le temps de la commande, rien d'écrit sur le disque.\n",
+  "usage": "Utilisation : sagnac [--lang LANGUE] <commande>\n\nCommandes :\n  login      Connecte cet ordinateur à votre compte.\n  logout     Déconnecte cet ordinateur et révoque ses jetons.\n  pull LAB   Télécharge le kit d'un lab dans le dossier courant.\n  open CIBLE Ouvre l'énoncé d'un lab, ou enregistre ceux d'un module pour la lecture hors ligne.\n  check [LAB] Vérifie votre travail dans le dossier workspace/ du lab et envoie le résultat à votre compte.\n  doctor     Vérifie la version, les avis de sécurité et la fin de support.\n  clean      Supprime le cluster et les fichiers temporaires du lab (tous avec --all) ; garde modèles et images de base.\n  purge      Supprime les résultats en attente d'envoi sur cet ordinateur.\n  version    Affiche la version, la fin de support et le contact sécurité.\n  help       Affiche cette aide (aussi : -h, --help).\n\nOptions :\n  --lang LANGUE   Langue des messages (fr).\n  --version N     Avec pull : version du lab (par défaut, la version courante).\n  --text          Avec open : affiche l'énoncé d'un lab dans le terminal.\n  --json          Avec check : affiche le résultat en JSON, sans autre texte sur la sortie standard.\n  --all           Avec clean : tous les labs, pas seulement le lab courant.\n  --dry-run       Avec clean : affiche ce qui serait supprimé, sans rien supprimer.\n  --session       Avec pull, open ou check : connexion gardée en mémoire le temps de la commande, rien d'écrit sur le disque.\n",
   "version.line": "sagnac %s",
   "version.publisher": "Éditeur : %s",
   "version.end_of_support": "Fin de support : %s",
@@ -145,5 +145,19 @@
   "doctor.support_soon": "À prévoir : le support se termine en %s. Après cette date, plus aucun correctif de sécurité n'est publié.",
   "doctor.support_ended": "À corriger : le support s'est terminé en %s. Plus aucun correctif de sécurité n'est publié.",
   "doctor.nothing": "Rien à corriger.",
-  "doctor.to_fix": "Points à corriger : %d."
+  "doctor.to_fix": "Points à corriger : %d.",
+  "clean.nothing": "Rien à supprimer : pas de cluster ni de fichier temporaire.",
+  "clean.dry_run": "Simulation : rien n'est supprimé. « sagnac clean » supprimerait :",
+  "clean.would_cluster": "  le cluster %s et son dossier %s",
+  "clean.would_temporary": "  le fichier temporaire %s",
+  "clean.cluster_done": "Cluster %s supprimé.",
+  "clean.temporary_done": "Fichier temporaire supprimé : %s",
+  "clean.shared": "Le cluster %s peut servir à d'autres labs du même module ; « make setup » le recrée.",
+  "clean.kept": "Conservés : les modèles, les outils et les images de base dans %s, votre dossier workspace/ et les résultats en attente d'envoi.",
+  "clean.no_script": "Le cluster %s n'est pas supprimé : le script du kit (_cadre/bin/sagnac-cluster) est introuvable. Placez-vous dans le dossier où vous avez téléchargé le kit avec « sagnac pull », puis relancez « sagnac clean ».",
+  "clean.cluster_failed": "Le cluster %s n'a pas pu être supprimé (moteur de conteneurs arrêté ?). Démarrez-le, puis relancez « sagnac clean ».",
+  "clean.unsafe": "Refusé : « sagnac clean » ne supprime rien hors du cache de Sagnac, et le chemin du cache (SAGNAC_CACHE) ou le nom d'un cluster est vide, relatif ou trop large.",
+  "clean.no_cache": "Le dossier du cache de Sagnac est introuvable : HOME et SAGNAC_CACHE sont vides. Rien n'est supprimé.",
+  "clean.ignored_link": "Ignoré, c'est un lien symbolique : %s",
+  "clean.failed": "Un fichier temporaire n'a pas pu être supprimé (%s). Vérifiez les droits du dossier."
 }

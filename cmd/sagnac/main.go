@@ -123,6 +123,8 @@ func dispatch(ctx context.Context, args []string, getenv func(string) string, st
 		return runOpen(ctx, parsed.rest[1:], stdout, stderr), command
 	case "check":
 		return runCheck(ctx, parsed.rest[1:], stdout, stderr), command
+	case "clean":
+		return runClean(ctx, parsed.rest[1:], stdout, stderr), command
 	default:
 		fmt.Fprintln(stderr, i18n.T("error.unknown_command", command))
 		return exitCodeOf(errUsage), command
