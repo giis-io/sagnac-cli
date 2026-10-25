@@ -57,6 +57,7 @@ une étiquette de publication (`v0.1.0`), c'est l'étiquette exacte.
 | `sagnac pull LAB` | Télécharge le kit d'un lab dans le dossier courant et vérifie son empreinte. |
 | `sagnac open LAB` | Ouvre l'énoncé d'un lab et en garde une copie lisible hors ligne. |
 | `sagnac check [LAB]` | Vérifie le dossier `workspace/` du lab, affiche le résultat et l'envoie à votre compte comme tentative déclarée. Sans réseau, le résultat attend dans `$XDG_STATE_HOME/sagnac/queue/` (30 jours). `--json` : le résultat en JSON. |
+| `sagnac check --show-payload` | Lance les contrôles, puis affiche les deux requêtes que `sagnac check` enverrait à la plateforme (`POST /v1/sessions`, `POST /v1/attempts`), en-têtes et corps compris, sans rien envoyer ni contacter. Le jeton n'est jamais affiché. Voir `docs/contrat.md`, section 4 bis. |
 | `sagnac clean [--all] [--dry-run]` | Supprime le cluster du lab courant (tous les clusters avec `--all`) et les fichiers temporaires du cache de Sagnac. Garde les modèles, les outils, les images de base, votre `workspace/` et les résultats en attente. `--dry-run` affiche ce qui serait supprimé. Voir `docs/contrat.md`, section 5 bis. |
 | `sagnac purge` | Supprime les résultats en attente d'envoi. |
 | `sagnac doctor` | Signale une version plus récente, un avis de sécurité et la fin de support proche. Fonctionne sans compte. |
@@ -79,6 +80,17 @@ impossible. Un avis de sécurité ou une fin de support à moins de six mois s'a
 la sortie d'erreur à chaque lancement, sans changer le code de sortie. L'aide
 (`sagnac help`, `-h`, aucune commande) et les commandes inconnues répondent tout
 de suite : elles lisent la copie gardée, sans interroger le réseau.
+
+## Ce que `sagnac check` envoie
+
+Connecté, `sagnac check` envoie deux requêtes à la plateforme : `POST /v1/sessions`
+(le lab, sa version et l'empreinte de ses contrôles, pour obtenir une graine) puis
+`POST /v1/attempts` (le résultat : verdict ; pour chaque contrôle, son identifiant, son
+statut, son code d'échec et les valeurs typées qu'il a relevées ; durées, graine, empreinte
+des contrôles, système, architecture, moteur de conteneurs et version de la CLI).
+Aucun fichier de votre espace de
+travail n'y figure. `sagnac check --show-payload` les affiche exactement, sans
+rien envoyer.
 
 L'option `--lang` choisit la langue des messages. Sans elle, `sagnac` lit
 `LC_ALL`, `LC_MESSAGES` puis `LANG`. Le français est la langue de référence et

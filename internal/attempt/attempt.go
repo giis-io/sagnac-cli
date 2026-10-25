@@ -40,11 +40,11 @@ type Session struct {
 // that is not a 201 comes back as *api.APIError (a code of the list) or
 // *account.StatusError.
 func NewSession(ctx context.Context, c *account.Client, lab string, version int64, checksSHA256 string) (*Session, error) {
-	body, err := json.Marshal(map[string]any{"lab": lab, "version": version, "checks_sha256": checksSHA256})
+	body, err := SessionBody(lab, version, checksSHA256)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := post(ctx, c, "/v1/sessions", body, nil)
+	resp, err := post(ctx, c, SessionsPath, body, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func NewSession(ctx context.Context, c *account.Client, lab string, version int6
 // idempotency key. 200 (already received) and 201 are a success; anything
 // else comes back as *api.APIError or *account.StatusError.
 func Send(ctx context.Context, c *account.Client, key string, result []byte) error {
-	resp, err := post(ctx, c, "/v1/attempts", result, http.Header{"Idempotency-Key": {key}})
+	resp, err := post(ctx, c, AttemptsPath, result, http.Header{"Idempotency-Key": {key}})
 	if err != nil {
 		return err
 	}
@@ -92,8 +92,7 @@ func post(ctx context.Context, c *account.Client, path string, body []byte, head
 		for k, v := range header {
 			req.Header[k] = v
 		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
+		setCommon(req.Header)
 		req.Header.Set("Authorization", "Bearer "+token)
 		return req, nil
 	})

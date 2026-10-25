@@ -71,12 +71,13 @@ var reServerVersion = regexp.MustCompile(
 func serverReadable(cli string) bool { return reServerVersion.MatchString(cli) }
 
 type checkOptions struct {
-	lab     string
-	json    bool
-	session bool
+	lab         string
+	json        bool
+	session     bool
+	showPayload bool
 }
 
-// parseCheck reads "[<lab>] [--json] [--session]" in any order.
+// parseCheck reads "[<lab>] [--json] [--session] [--show-payload]" in any order.
 func parseCheck(args []string, stderr io.Writer) (checkOptions, bool) {
 	var o checkOptions
 	for _, a := range args {
@@ -85,6 +86,8 @@ func parseCheck(args []string, stderr io.Writer) (checkOptions, bool) {
 			o.json = true
 		case a == "--session":
 			o.session = true
+		case a == showPayloadOption:
+			o.showPayload = true
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintln(stderr, i18n.T("error.unknown_option", a))
 			return o, false
@@ -94,6 +97,11 @@ func parseCheck(args []string, stderr io.Writer) (checkOptions, bool) {
 			fmt.Fprintln(stderr, i18n.T("error.unexpected_argument", a, "check"))
 			return o, false
 		}
+	}
+	if o.showPayload && o.session {
+		// --session opens the device flow: it contacts the server.
+		fmt.Fprintln(stderr, i18n.T("check.payload_with_session"))
+		return o, false
 	}
 	if o.lab != "" && !kit.ValidLab(o.lab) {
 		fmt.Fprintln(stderr, i18n.T("check.invalid_lab", o.lab))
@@ -193,7 +201,11 @@ func runCheck(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	if o.json {
 		loginOut = stderr
 	}
-	conn, cleanup := connect(ctx, o, lab, digest, loginOut, stderr)
+	// --show-payload contacts nobody: no login, no session, no queue.
+	conn, cleanup := connection{}, func() {}
+	if !o.showPayload {
+		conn, cleanup = connect(ctx, o, lab, digest, loginOut, stderr)
+	}
 	defer cleanup()
 	if ctx.Err() != nil {
 		fmt.Fprintln(stderr, i18n.T("check.interrupted"))
@@ -226,6 +238,9 @@ func runCheck(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	if err != nil {
 		fmt.Fprintln(stderr, i18n.T("error.internal"))
 		return exitCodeOf(errUnexpected)
+	}
+	if o.showPayload {
+		return showPayload(o, lab, digest, result, body, workspace, stdout, stderr)
 	}
 	info := stdout
 	if o.json {

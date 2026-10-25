@@ -178,6 +178,21 @@ Le délai de `Retry-After` (secondes) est affiché, jamais attendu : la limite
 de la plateforme se compte par heure, et `check` ne bloque pas l'élève pour un
 envoi.
 
+### Voir ce qui est envoyé
+
+`sagnac check --show-payload` lance les contrôles ici, avec une graine locale,
+puis affiche les deux requêtes qu'un `sagnac check` connecté enverrait
+(`POST /v1/sessions`, `POST /v1/attempts`) : méthode, adresse, en-têtes et
+corps. Il ne contacte personne : ni session, ni envoi, ni connexion, ni file,
+et pas même la lecture quotidienne du fichier de version. Les requêtes sont
+construites par le code qui les envoie (`internal/attempt`) : mêmes en-têtes,
+même corps, octet pour octet, hors ce que seul le serveur ou l'horloge décide
+(`session` et `seed` du résultat, `started_at`, durées). Le jeton n'est jamais
+affiché (`Authorization: Bearer <jeton de votre connexion>`), ni la clé
+d'idempotence, tirée au moment de l'envoi. `--json` donne `{"requests": [...]}`
+sur la sortie standard. `--session` est refusé avec cette option (code 64). Le
+code de sortie est celui de l'oracle.
+
 ## 5. Codes de sortie
 
 Mêmes codes pour toutes les commandes :
