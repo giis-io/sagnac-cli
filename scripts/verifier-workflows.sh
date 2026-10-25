@@ -4,6 +4,11 @@
 # of a fork (pull_request_target, workflow_run), a top-level permissions
 # block, no write permission, no OIDC token, no secret, every action pinned by
 # a full commit SHA.
+# One workflow is the exception, release.yml: it runs on the push of a version
+# tag only (never a pull request, a manual run or a schedule) and may hold
+# the two permissions a signed release needs, contents: write (publish the
+# release) and id-token: write (the OIDC token of the cosign signature), as job
+# permissions; it still uses no secret and no unpinned action.
 # Usage: scripts/verifier-workflows.sh [REPOSITORY]   (0 clean, 1 refused)
 set -eu
 root=${1:-.}
@@ -18,11 +23,29 @@ refuse() {
 	refused=1
 }
 trigger=pull_request''_target
-# Write permissions allowed in a workflow, as "scope: write"; none today.
-allowed_writes=""
+# Write permissions allowed in a workflow, as "scope:write"; none, except
+# in the release workflow (see above).
+release_writes="contents:write id-token:write"
 for f in "$dir"/*.yml "$dir"/*.yaml; do
 	[ -f "$f" ] || continue
 	name=${f#"$root"/}
+	allowed_writes=""
+	release=0
+	case $name in
+	.github/workflows/release.yml | .github/workflows/release.yaml)
+		allowed_writes=$release_writes
+		release=1
+		;;
+	esac
+	if [ "$release" -eq 1 ]; then
+		# Nothing but the push of a tag starts a release.
+		if grep -En '^[[:space:]]*(pull_request|workflow_dispatch|schedule|issue_comment|release|repository_dispatch):' "$f" >/dev/null; then
+			refuse "$name" "seul le push d'une étiquette de version peut lancer une publication"
+		fi
+		if ! grep -Eq '^[[:space:]]+tags:' "$f" || grep -Eq '^[[:space:]]+branches:' "$f"; then
+			refuse "$name" "le déclencheur doit être le push d'une étiquette (tags:), sans branches:"
+		fi
+	fi
 	if grep -n "$trigger" "$f" >/dev/null; then
 		refuse "$name" "déclencheur $trigger interdit (code d'un fork avec les droits du dépôt)"
 	fi
@@ -44,7 +67,7 @@ for f in "$dir"/*.yml "$dir"/*.yaml; do
 			;;
 		esac
 	done || refused=1
-	if grep -n 'id-token' "$f" >/dev/null; then
+	if [ "$release" -eq 0 ] && grep -n 'id-token' "$f" >/dev/null; then
 		refuse "$name" "id-token interdit hors du workflow de publication"
 	fi
 	if grep -n 'secrets\.' "$f" >/dev/null; then

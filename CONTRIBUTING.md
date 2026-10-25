@@ -50,6 +50,27 @@ La CI relance ces commandes sur chaque demande de fusion
 (`.github/workflows/pr.yml`). Pour une première contribution, un mainteneur
 approuve le lancement des workflows avant qu'ils tournent.
 
+## Publier une version
+
+Réservé aux mainteneurs. Une version naît d'une étiquette `vMAJ.MIN.CORR` poussée
+sur `main` ; le fichier `VERSION` doit déjà porter le même numéro.
+
+1. Fusionner la demande de fusion qui met `VERSION` à jour.
+2. Poser et pousser l'étiquette : `git tag v0.1.0 && git push origin v0.1.0`.
+3. Le workflow `.github/workflows/release.yml` construit les archives
+   (`sagnac_<version>_<système>_<architecture>.tar.gz` pour `darwin` et `linux`,
+   `arm64` et `amd64`), écrit `SHA256SUMS`, le signe avec cosign sans clé
+   (`SHA256SUMS.sigstore.json`), vérifie la signature qu'il vient de faire, puis
+   crée la page de la version avec ces fichiers et la formule `sagnac.rb`.
+4. Copier `sagnac.rb` dans `Formula/sagnac.rb` du dépôt `giis-io/homebrew-tap`,
+   puis `brew audit --strict --online giis-io/tap/sagnac`.
+
+Le workflow n'utilise aucun secret. Seul `release.yml` peut écrire dans le dépôt
+et demander un jeton OIDC ; `scripts/verifier-workflows.sh` refuse ces droits
+ailleurs, et refuse à `release.yml` tout autre déclencheur que le push d'une
+étiquette. Pour vérifier une version à la main, voir « Installer » dans
+`README.md`.
+
 ## Certificat d'origine (DCO)
 
 Chaque commit porte une ligne `Signed-off-by` à votre nom, avec l'adresse de

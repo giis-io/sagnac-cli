@@ -10,10 +10,81 @@ poste de l'élève, lance les vérifications d'un lab et affiche le résultat.
 Disponibles : `login`, `logout`, `pull`, `open`, `check`, `clean`, `purge`, `doctor`, `version`, `help`.
 Les commandes `submit` et `update` arrivent ensuite.
 
-## Installer depuis les sources
+## Installer
 
-Il n'existe pas encore de binaire publié : on construit `sagnac` soi-même, depuis
-un clone du dépôt. Il faut Go 1.26.10 (version fixée dans `go.mod`) et `make`.
+Aucune version n'est encore publiée. À partir de la première, chaque version
+est publiée sur la page des versions du dépôt avec ses sommes de contrôle
+SHA-256 (`SHA256SUMS`) et une signature de ce fichier. Aucune méthode
+d'installation de `sagnac` ne passe par `curl ... | sudo bash`, et vous ne
+devez en accepter aucune qui le demande : un programme installé avec `sudo`
+sans avoir été lu ni vérifié a tous les droits sur votre machine.
+
+### Homebrew (macOS et Linux)
+
+```
+brew install giis-io/tap/sagnac
+```
+
+Homebrew télécharge l'archive de votre plateforme et refuse de l'installer si
+sa somme SHA-256 n'est pas celle de la formule. Aucun droit administrateur
+n'est nécessaire. La formule est dans `packaging/homebrew/sagnac.rb.in`.
+
+### Téléchargement vérifié
+
+Les commandes ci-dessous n'utilisent pas `sudo` : le binaire va dans
+`~/.local/bin`. Choisissez la version, le système (`darwin` ou `linux`) et
+l'architecture (`arm64` ou `amd64`, `uname -m`).
+
+```
+VERSION=0.1.0
+OS=darwin
+ARCH=arm64
+BASE=https://github.com/giis-io/sagnac-cli/releases/download/v$VERSION
+curl -fsSLO "$BASE/sagnac_${VERSION}_${OS}_${ARCH}.tar.gz"
+curl -fsSLO "$BASE/SHA256SUMS"
+curl -fsSLO "$BASE/SHA256SUMS.sigstore.json"
+```
+
+1. Vérifiez que `SHA256SUMS` a été signé par le workflow de publication de ce
+   dépôt (signature « keyless » de [cosign](https://docs.sigstore.dev/cosign/installation/),
+   sans clé à gérer : l'identité est celle du workflow GitHub Actions) :
+
+   ```
+   cosign verify-blob \
+     --bundle SHA256SUMS.sigstore.json \
+     --certificate-identity "https://github.com/giis-io/sagnac-cli/.github/workflows/release.yml@refs/tags/v$VERSION" \
+     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+     SHA256SUMS
+   ```
+
+   La réponse attendue est `Verified OK`. Toute autre réponse : n'installez pas.
+
+2. Vérifiez la somme de l'archive (Linux, puis macOS) :
+
+   ```
+   grep "  sagnac_${VERSION}_${OS}_${ARCH}.tar.gz\$" SHA256SUMS | sha256sum -c -
+   grep "  sagnac_${VERSION}_${OS}_${ARCH}.tar.gz\$" SHA256SUMS | shasum -a 256 -c -
+   ```
+
+   La réponse attendue est `...tar.gz: OK` (ou `: Réussi` selon la langue).
+
+3. Installez, sans `sudo` :
+
+   ```
+   tar -xzf "sagnac_${VERSION}_${OS}_${ARCH}.tar.gz" sagnac
+   install -d ~/.local/bin
+   install -m 0755 sagnac ~/.local/bin/sagnac
+   sagnac version
+   ```
+
+   `~/.local/bin` doit être dans votre `PATH`. Sans `cosign`, l'étape 2 seule
+   garantit que l'archive est celle du fichier `SHA256SUMS` téléchargé ; seule
+   l'étape 1 garantit que ce fichier vient de GIIS.
+
+### Depuis les sources
+
+On construit `sagnac` soi-même, depuis un clone du dépôt. Il faut Go 1.26.10
+(version fixée dans `go.mod`) et `make`.
 
 ```
 make build
@@ -24,13 +95,6 @@ make build
 (par exemple `~/.local/bin`). Un simple `go build` ne convient pas : il laisse
 vides la date de fin de support et les coordonnées de l'éditeur, et `sagnac`
 refuse alors de démarrer.
-
-## Binaires publiés, plus tard
-
-Quand les binaires seront publiés, chacun sera accompagné de sa somme SHA-256 et
-d'une signature ; la page de téléchargement dira comment les vérifier. Cette
-vérification n'existe pas encore : n'installez pas un binaire dont vous ne
-connaissez pas l'origine.
 
 ## Kits de labs
 
