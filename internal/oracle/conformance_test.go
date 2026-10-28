@@ -155,6 +155,11 @@ func labStates(t *testing.T, labDir string) []state {
 			expected = append(expected, f["check"].(string)+":"+f["code"].(string))
 		}
 		sort.Strings(expected)
+		// scope: replay (a bypass that only the hidden set of the replay
+		// catches, contract section 12): green on the workstation.
+		if scope, _ := decl["scope"].(string); scope == "replay" {
+			exit, expected = 0, nil
+		}
 		states = append(states, state{name: "mutant " + filepath.Base(filepath.Dir(m)), base: base,
 			mutant: filepath.Dir(m), exit: int(exit), failures: expected})
 	}
