@@ -1144,3 +1144,41 @@ func TestQueueEntryKeptOn429DuringFlush(t *testing.T) {
 		t.Errorf("pending %v, stderr %q", keys, stderr)
 	}
 }
+
+// clusterV3Meta is the head of a lab of the cluster contract v3: nothing in
+// meta.yaml tells the version, only _cadre/clusters/sagnac-b3.conf.
+const clusterV3Meta = `id: hello
+version: 1
+cluster: sagnac-b3
+docker: true
+tools: [k3d, kubectl, k3s, k3s-airgap, k3d-tools]
+preconditions:
+  - code: CLUSTER_DIRTY
+    description: "objets restants"
+  - code: CLUSTER_BUSY
+    description: "cluster occupé"
+`
+
+// A kit whose cluster names a contract this CLI does not know (CONTRAT=9) or
+// a key it does not know is refused before anything runs: exit 3, the file at
+// fault named, no session asked, nothing sent or queued (docs/contrat.md,
+// section 7 bis).
+func TestCheckRefusesUnknownClusterContract(t *testing.T) {
+	for _, conf := range []string{"API_PORT=6560\nCONTRAT=9\n", "API_PORT=6560\nCONTRAT=3\nNODES=2\n"} {
+		c := newCheckRig(t, clusterV3Meta)
+		path := filepath.Join(filepath.Dir(c.labDir), "_cadre", "clusters", "sagnac-b3.conf")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(conf), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		code, stdout, stderr := c.run(t, "check")
+		if code != oracle.ExitOracle || !strings.Contains(stderr, i18n.T("check.invalid_kit", "clusters/sagnac-b3.conf")) {
+			t.Errorf("code %d, stdout %q, stderr %q", code, stdout, stderr)
+		}
+		if c.plat.sessionCount() != 0 || len(c.plat.sent()) != 0 || len(c.pending(t)) != 0 {
+			t.Errorf("session or attempt despite a refused kit")
+		}
+	}
+}

@@ -43,7 +43,7 @@ func clusterFixture(t *testing.T, meta string, scripts map[string]string) (strin
 	dir, ws := fixture(t, meta, scripts, "ONE_BAD", "TWO_BAD", "CLUSTER_MISSING", "CLUSTER_DIRTY", "CLUSTER_BUSY")
 	cadre := filepath.Join(filepath.Dir(dir), "_cadre")
 	writeFile(t, filepath.Join(cadre, "clusters", "sagnac-b1.conf"),
-		"# Cluster de référence\nAPI_PORT=6550\nAPI_PORT=7000\n", 0o644)
+		"# Cluster de référence\n\nAPI_PORT=6550\n", 0o644)
 	writeFile(t, filepath.Join(cadre, "lib", "cluster-nettoyage.sh"), "#!/bin/sh\nexit 0\n", 0o755)
 	return dir, ws
 }
@@ -64,8 +64,9 @@ func writeFile(t *testing.T, p, content string, mode os.FileMode) {
 func TestLoadLabCluster(t *testing.T) {
 	dir, _ := clusterFixture(t, clusterMeta, map[string]string{"one.sh": "sagnac_reussite"})
 	lab := mustLoad(t, dir)
-	if lab.Cluster != "sagnac-b1" || lab.APIPort != 6550 || !lab.Docker {
-		t.Errorf("cluster %q, port %d, docker %v; want sagnac-b1, 6550 (first line wins), true", lab.Cluster, lab.APIPort, lab.Docker)
+	if lab.Cluster != "sagnac-b1" || lab.APIPort != 6550 || !lab.Docker || lab.ClusterContract != 2 {
+		t.Errorf("cluster %q, port %d, docker %v, contract %d; want sagnac-b1, 6550, true, 2",
+			lab.Cluster, lab.APIPort, lab.Docker, lab.ClusterContract)
 	}
 	plain, _ := fixture(t, "id: x\nversion: 1\nchecks:"+okCheck, map[string]string{"one.sh": "sagnac_reussite"}, "ONE_BAD")
 	if l := mustLoad(t, plain); l.Cluster != "" || l.APIPort != 0 {
@@ -90,7 +91,22 @@ func TestLoadLabClusterRejects(t *testing.T) {
 		{"no tools", strings.Replace(clusterMeta, "tools: [k3d, kubectl, k3s, k3s-airgap, k3d-tools, busybox]\n", "", 1), "", "k3d, kubectl"},
 		{"CLUSTER_BUSY not declared", strings.Replace(clusterMeta, "  - code: CLUSTER_BUSY\n    description: \"cluster occupé\"\n", "", 1), "", "CLUSTER_BUSY"},
 		{"CLUSTER_DIRTY not declared", strings.Replace(clusterMeta, "  - code: CLUSTER_DIRTY\n    description: \"objets restants\"\n", "", 1), "", "CLUSTER_DIRTY"},
-		{"port missing", clusterMeta, "OTHER=1\n", "API_PORT"},
+		{"port missing", clusterMeta, "# CONTRAT absent\n", "invalid API_PORT"},
+		{"port empty", clusterMeta, "API_PORT=\n", "invalid API_PORT"},
+		{"port with a blank", clusterMeta, "API_PORT=6550 \n", "invalid API_PORT"},
+		{"port twice", clusterMeta, "API_PORT=6550\nAPI_PORT=7000\n", `unknown line "API_PORT=7000"`},
+		{"unknown key", clusterMeta, "API_PORT=6550\nOTHER=1\n", `unknown line "OTHER=1"`},
+		{"key with a blank", clusterMeta, "API_PORT = 6550\n", "unknown line"},
+		{"indented key", clusterMeta, " API_PORT=6550\n", "unknown line"},
+		{"indented comment", clusterMeta, "API_PORT=6550\n  # note\n", "unknown line"},
+		{"line without =", clusterMeta, "API_PORT=6550\nCONTRAT\n", "unknown line"},
+		{"lower case key", clusterMeta, "api_port=6550\n", "unknown line"},
+		{"unknown contract", clusterMeta, "API_PORT=6550\nCONTRAT=9\n", "CONTRAT=9 unknown"},
+		{"contract 2 written", clusterMeta, "API_PORT=6550\nCONTRAT=2\n", "CONTRAT=2 unknown"},
+		{"empty contract", clusterMeta, "API_PORT=6550\nCONTRAT=\n", "CONTRAT= unknown"},
+		{"contract with a blank", clusterMeta, "API_PORT=6550\nCONTRAT=3 \n", "CONTRAT=3  unknown"},
+		{"contract twice", clusterMeta, "API_PORT=6550\nCONTRAT=3\nCONTRAT=3\n", `unknown line "CONTRAT=3"`},
+		{"not UTF-8", clusterMeta, "API_PORT=6550\n# \xff\n", "unreadable"},
 		{"port not a number", clusterMeta, "API_PORT=abc\n", "API_PORT"},
 		{"port out of range", clusterMeta, "API_PORT=70000\n", "API_PORT"},
 		{"port zero", clusterMeta, "API_PORT=0\n", "API_PORT"},
@@ -108,6 +124,31 @@ func TestLoadLabClusterRejects(t *testing.T) {
 			}
 			if !strings.Contains(kit.Error(), c.reason) {
 				t.Errorf("error %q does not name %q", kit.Error(), c.reason)
+			}
+		})
+	}
+}
+
+// The contract of the cluster is read in its .conf: 2 without the line
+// CONTRAT, 3 with CONTRAT=3 (docs/contrat.md, section 7 bis). Comments, empty
+// lines, blank lines and CRLF ends are skipped, in any order of the keys.
+func TestLoadLabClusterContract(t *testing.T) {
+	for _, c := range []struct {
+		name, conf string
+		port, want int
+	}{
+		{"v2", "API_PORT=6550\n", 6550, 2},
+		{"v3", "# Premier cluster du contrat v3\nAPI_PORT=6560\nCONTRAT=3\n", 6560, 3},
+		{"v3, contract first", "CONTRAT=3\n\n   \nAPI_PORT=6552", 6552, 3},
+		{"v3, CRLF", "# essai\r\nAPI_PORT=6560\r\nCONTRAT=3\r\n", 6560, 3},
+		{"leading zero", "API_PORT=06550\n", 6550, 2},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir, _ := clusterFixture(t, clusterMeta, map[string]string{"one.sh": "sagnac_reussite"})
+			writeFile(t, filepath.Join(filepath.Dir(dir), "_cadre", "clusters", "sagnac-b1.conf"), c.conf, 0o644)
+			lab := mustLoad(t, dir)
+			if lab.APIPort != c.port || lab.ClusterContract != c.want {
+				t.Errorf("port %d, contract %d; want %d, %d", lab.APIPort, lab.ClusterContract, c.port, c.want)
 			}
 		})
 	}

@@ -132,9 +132,12 @@ type Lab struct {
 	Docker bool
 	// Cluster is the name of the local Kubernetes cluster of the lab, empty
 	// without one (docs/contrat.md, section 7); APIPort is the port of its
-	// API on 127.0.0.1, read in _cadre/clusters/<name>.conf.
-	Cluster string
-	APIPort int
+	// API on 127.0.0.1 and ClusterContract the version of its contract (2,
+	// or 3 with CONTRAT=3, section 7 bis), both read in
+	// _cadre/clusters/<name>.conf.
+	Cluster         string
+	APIPort         int
+	ClusterContract int
 	// Teardown is checks/teardown.sh when the lab has one, run after the
 	// last check.
 	Teardown string

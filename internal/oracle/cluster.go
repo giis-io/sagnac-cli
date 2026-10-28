@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 )
 
 // Labs with a local Kubernetes cluster (docs/contrat.md, section 7). The
@@ -24,8 +25,10 @@ const (
 
 var (
 	reCluster  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
-	reConfKey  = regexp.MustCompile(`^[A-Z_]+$`)
 	reConfPort = regexp.MustCompile(`^[0-9]+$`)
+	// confKeys are the only keys of _cadre/clusters/<name>.conf (contract
+	// of the cluster v3, docs/contrat.md, section 7 bis).
+	confKeys = []string{"API_PORT", "CONTRAT"}
 	// clusterTools are the tools a lab with a cluster declares in tools
 	// (bin/sagnac-cluster reads them from the Sagnac cache).
 	clusterTools = []string{"k3d", "kubectl", "k3s", "k3s-airgap", "k3d-tools"}
@@ -50,7 +53,7 @@ func (l *Lab) loadCluster(meta map[string]any) error {
 	if err != nil {
 		return err
 	}
-	port, err := clusterPort(filepath.Dir(filepath.Dir(lib)), name)
+	conf, err := readClusterConf(filepath.Dir(filepath.Dir(lib)), name)
 	if err != nil {
 		return err
 	}
@@ -66,7 +69,7 @@ func (l *Lab) loadCluster(meta map[string]any) error {
 	if len(missing) > 0 {
 		return kitErr("meta.yaml", "a lab with a cluster declares in tools: "+strings.Join(missing, ", "))
 	}
-	l.Cluster, l.APIPort = name, port
+	l.Cluster, l.APIPort, l.ClusterContract = name, conf.apiPort, conf.contract
 	return nil
 }
 
@@ -84,29 +87,54 @@ func declaresTool(tools any, tool string) bool {
 	return false
 }
 
-// clusterPort reads API_PORT in <cadre>/clusters/<name>.conf: lines
-// KEY=value, the first one of a key wins, same reading as bin/sagnac-cluster.
-func clusterPort(cadre, name string) (int, error) {
-	conf := filepath.Join(cadre, "clusters", name+".conf")
-	if !reCluster.MatchString(name) || !isRegular(conf) {
-		return 0, kitErr("meta.yaml", "cluster "+strconv.Quote(name)+" unknown to the cadre (clusters/<name>.conf)")
+// clusterConf is what _cadre/clusters/<name>.conf says: the port of the API
+// on 127.0.0.1 and the version of the cluster contract (2 without the line
+// CONTRAT, 3 with CONTRAT=3).
+type clusterConf struct {
+	apiPort  int
+	contract int
+}
+
+// readClusterConf reads <cadre>/clusters/<name>.conf like conf_cluster of the
+// reference executor and conf_valide of bin/sagnac-cluster: lines KEY=value,
+// empty lines and lines that start with # skipped. Only API_PORT and
+// CONTRAT, each at most once, values taken as written (no blank removed);
+// API_PORT between 1 and 65535, CONTRAT absent or 3. Anything else, such as
+// CONTRAT=9 or a key of a later contract, refuses the kit: a CLI that does
+// not know a contract never runs its checks.
+func readClusterConf(cadre, name string) (clusterConf, error) {
+	where := "clusters/" + name + ".conf"
+	path := filepath.Join(cadre, "clusters", name+".conf")
+	if !reCluster.MatchString(name) || !isRegular(path) {
+		return clusterConf{}, kitErr("meta.yaml", "cluster "+strconv.Quote(name)+" unknown to the cadre (clusters/<name>.conf)")
 	}
-	raw, err := os.ReadFile(conf)
-	if err != nil {
-		return 0, kitErr("clusters/"+name+".conf", "unreadable")
+	raw, err := os.ReadFile(path)
+	if err != nil || !utf8.Valid(raw) {
+		return clusterConf{}, kitErr(where, "unreadable")
 	}
 	values := map[string]string{}
 	for _, line := range pySplitLines(string(raw)) {
-		key, value, found := strings.Cut(line, "=")
-		if _, seen := values[key]; found && reConfKey.MatchString(key) && !seen {
-			values[key] = pyStrip(value)
+		if pyStrip(line) == "" || strings.HasPrefix(line, "#") {
+			continue
 		}
+		key, value, found := strings.Cut(line, "=")
+		if _, seen := values[key]; !found || !slices.Contains(confKeys, key) || seen {
+			return clusterConf{}, kitErr(where, "unknown line "+strconv.Quote(line)+" (keys: API_PORT, CONTRAT)")
+		}
+		values[key] = value
 	}
 	port, err := strconv.Atoi(values["API_PORT"])
 	if !reConfPort.MatchString(values["API_PORT"]) || err != nil || port < 1 || port > 65535 {
-		return 0, kitErr("clusters/"+name+".conf", "invalid API_PORT")
+		return clusterConf{}, kitErr(where, "invalid API_PORT")
 	}
-	return port, nil
+	conf := clusterConf{apiPort: port, contract: 2}
+	if contract, ok := values["CONTRAT"]; ok {
+		if contract != "3" {
+			return clusterConf{}, kitErr(where, "CONTRAT="+contract+" unknown (only value: 3)")
+		}
+		conf.contract = 3
+	}
+	return conf, nil
 }
 
 // cleanupDelay bounds the cleanup of the cluster and checks/teardown.sh,
