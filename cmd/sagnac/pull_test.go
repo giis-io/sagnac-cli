@@ -488,3 +488,31 @@ func TestPullUnreadableDirectoryHasItsOwnMessage(t *testing.T) {
 		t.Errorf("requests sent: %v", got)
 	}
 }
+
+// The kit of a lab of the cluster contract v3 carries, besides the .conf
+// that says CONTRAT=3, the files of _cadre/clusters/v3/ (audit policy,
+// guards, namespaces of the base) that bin/sagnac-cluster copies into the
+// cache: sagnac pull writes them as they are.
+func TestPullClusterV3Kit(t *testing.T) {
+	p := newPullRig(t)
+	files := map[string]string{
+		"_cadre/clusters/sagnac-b3.conf":       "API_PORT=6560\nCONTRAT=3\n",
+		"_cadre/clusters/v3/audit-policy.yaml": "apiVersion: audit.k8s.io/v1\nkind: Policy\n",
+		"_cadre/clusters/v3/garde-fous.yaml":   "kind: ValidatingAdmissionPolicy\n",
+		"_cadre/clusters/v3/socle.yaml":        "kind: Namespace\n",
+	}
+	extra := []member{{name: "_cadre/clusters", typ: tar.TypeDir, mode: 0o755}, {name: "_cadre/clusters/v3", typ: tar.TypeDir, mode: 0o755}}
+	for _, name := range []string{"_cadre/clusters/sagnac-b3.conf", "_cadre/clusters/v3/audit-policy.yaml",
+		"_cadre/clusters/v3/garde-fous.yaml", "_cadre/clusters/v3/socle.yaml"} {
+		extra = append(extra, member{name: name, body: files[name], typ: tar.TypeReg, mode: 0o644})
+	}
+	p.kits.archives["hello"] = kitArchive(t, "hello", "setup:\n", extra...)
+	if code, _, stderr := p.run(t, "pull", "hello"); code != exitOK {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	for name, body := range files {
+		if got, err := os.ReadFile(filepath.Join(p.work, filepath.FromSlash(name))); err != nil || string(got) != body {
+			t.Errorf("%s: %q, %v", name, got, err)
+		}
+	}
+}
