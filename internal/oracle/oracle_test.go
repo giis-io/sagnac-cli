@@ -339,12 +339,14 @@ sagnac_reussite`
 		k, v, _ := strings.Cut(line, "=")
 		env[k] = v
 	}
-	// The variables of contract v2 section 1, plus XDG_CONFIG_HOME on an empty
+	// The variables of contract v2 section 3 (Git settings included), plus XDG_CONFIG_HOME on an empty
 	// directory of the run: no SAGNAC_* of the account, no session bus, never
 	// the configuration directory of the person (where the tokens may live).
 	allowed := map[string]bool{"PATH": true, "HOME": true, "TMPDIR": true, "LC_ALL": true, "XDG_CONFIG_HOME": true,
 		"SAGNAC_LAB": true, "SAGNAC_CHECK": true, "SAGNAC_WORKSPACE": true, "SAGNAC_SEED": true,
-		"SAGNAC_RESULT": true, "SAGNAC_LIB": true, "PWD": true, "SHLVL": true, "_": true, "OLDPWD": true}
+		"SAGNAC_RESULT": true, "SAGNAC_LIB": true, "PWD": true, "SHLVL": true, "_": true, "OLDPWD": true,
+		"GIT_CONFIG_COUNT": true, "GIT_CONFIG_KEY_0": true, "GIT_CONFIG_VALUE_0": true, "GIT_CONFIG_KEY_1": true,
+		"GIT_CONFIG_VALUE_1": true, "GIT_CONFIG_KEY_2": true, "GIT_CONFIG_VALUE_2": true}
 	for k := range env {
 		if !allowed[k] {
 			t.Errorf("variable %s reached the check", k)
@@ -649,7 +651,7 @@ func TestArchitecture(t *testing.T) {
 			t.Errorf("normalizeArch(%q) = %q, want %q", in, got, want)
 		}
 	}
-	got := currentPlatform().Architecture
+	got := currentPlatform(false).Architecture
 	want := ""
 	if out, err := exec.Command("sysctl", "-n", "hw.optional.arm64").Output(); err == nil && strings.TrimSpace(string(out)) == "1" {
 		want = "arm64"

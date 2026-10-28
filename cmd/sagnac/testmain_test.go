@@ -3,12 +3,18 @@ package main
 import (
 	"os"
 	"testing"
+
+	"github.com/giis-io/sagnac-cli/internal/oracle"
 )
 
 // The version check runs at every launch: tests never reach the real server.
 // A closed local port refuses at once; a cache directory of their own keeps
 // the user's cache out of it.
 func TestMain(m *testing.M) {
+	// The test binary is the relay of a check under Linux (oracle.RunRelay).
+	if len(os.Args) > 1 && os.Args[1] == oracle.RelayCommand {
+		os.Exit(oracle.RunRelay(os.Args[2:]))
+	}
 	dir, err := os.MkdirTemp("", "sagnac-test-cache-")
 	if err != nil {
 		panic(err)
