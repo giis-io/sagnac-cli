@@ -80,3 +80,12 @@ make -C <plateforme>/labs/RN/rn-l6-kubernetes cluster-delete
 Avec `SAGNAC_XCHECK_CLUSTER=1`, `TestCrossCheck` traite un lab à cluster
 comme les autres : `make setup` (hors ligne, cluster déjà créé), solution et
 mutants, coupure du réseau, donc relais de l'API sous Linux.
+
+Les labs du contrat de cluster v3 (`cluster: sagnac-b3`, B3-M3 à M5) se
+jouent de la même façon, sur une autre VM jetable ou après
+`make cluster-delete` du lab de B1 (un seul cluster Sagnac en marche à la
+fois) : `make -C <plateforme>/labs/B3-M3/b3-m3-l1-hardened-pod setup` crée
+`sagnac-b3` (API sur `127.0.0.1:6560`), puis `TestCrossCheck` avec
+`SAGNAC_XCHECK_CLUSTER=1` sur les labs de `B3-M3`, `B3-M4` et `B3-M5`. Sans
+cluster, le cas « dirty v3 » vérifie déjà que les deux exécuteurs prennent
+la branche v3 du ramassage.
