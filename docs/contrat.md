@@ -114,10 +114,10 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
   (`ORACLE_INVALID_OUTPUT`), code absent de `codes` ou de `preconditions`
   (`ORACLE_UNDECLARED_CODE`), contrôle tué par une interruption
   (`ORACLE_CHECK_INTERRUPTED`).
-- **Plafond.** 60 s par passage, 240 s pour un lab GenAI, 360 s pour un lab
-  à cluster avec GenAI (section 7) ; le délai d'un contrôle reste borné par
-  `timeout_s` (section 2). Au-delà, les contrôles restants rendent
-  `ORACLE_TOTAL_TIMEOUT`.
+- **Plafond.** 60 s par passage sans cluster ni GenAI, 240 s avec l'un des
+  deux, 360 s pour un lab à cluster avec GenAI (section 7) ; le délai d'un
+  contrôle reste borné par `timeout_s` (section 2). Au-delà, les contrôles
+  restants rendent `ORACLE_TOTAL_TIMEOUT`.
 - **Graine.** `SAGNAC_SEED` vient du serveur quand l'élève est connecté (une
   graine par passage), sinon d'un tirage local. Les valeurs que l'élève doit
   produire en dérivent.
@@ -261,6 +261,7 @@ local, partagé entre les labs d'un parcours (`sagnac-b1` pour B1-M2 à M6).
   contrôle. Rien d'autre ne passe : ni Internet, ni un autre port de l'hôte,
   ni le moteur (`/run` et `/var/run` recouverts d'un `tmpfs`). Le kubeconfig
   reste valide tel quel. Le ramassage passe par la même enveloppe.
-- **Plafond.** Un passage d'un lab à cluster avec GenAI a 360 s : ses
-  contrôles démarrent des charges sur le cluster avant d'interroger le
-  modèle. `timeout_s` de chacun reste à 240 s au plus.
+- **Plafond.** Un passage d'un lab à cluster a 240 s, 360 s avec GenAI,
+  quel que soit le contrat du cluster : ses contrôles démarrent des charges
+  sur le cluster avant de juger quoi que ce soit. `timeout_s` de chacun
+  reste à 60 s au plus, 240 s avec GenAI (section 2).

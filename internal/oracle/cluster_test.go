@@ -466,8 +466,9 @@ func readFile(t *testing.T, p string) string {
 	return string(raw)
 }
 
-// The ceiling of a run is 60 s, 240 s with GenAI and 360 s with GenAI and a
-// cluster; timeout_s of a check stays within 240 s (docs/contrat.md, section 3).
+// The ceiling of a run is 60 s, 240 s with GenAI or a cluster (contract v2
+// or v3) and 360 s with GenAI and a cluster; timeout_s of a check stays within
+// 60 s without GenAI and 240 s with it (docs/contrat.md, section 3).
 func TestRunCeiling(t *testing.T) {
 	genAI := strings.Replace(clusterMeta, "version: 1\n", "version: 1\ngenai: true\n", 1)
 	plain := "id: x\nversion: 1\nchecks:" + okCheck
@@ -478,14 +479,20 @@ func TestRunCeiling(t *testing.T) {
 	}{
 		{"plain", plain, false, 60},
 		{"genai", strings.Replace(plain, "version: 1\n", "version: 1\ngenai: true\n", 1), false, 240},
-		{"cluster", clusterMeta, true, 60},
+		{"cluster", clusterMeta, true, 240},
+		{"cluster v3", clusterMeta, true, 240},
 		{"cluster and genai", genAI, true, 360},
+		{"cluster v3 and genai", genAI, true, 360},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var dir string
 			if c.cluster {
 				dir, _ = clusterFixture(t, c.meta, map[string]string{"one.sh": "sagnac_reussite"})
+				if strings.Contains(c.name, "v3") {
+					writeFile(t, filepath.Join(filepath.Dir(dir), "_cadre", "clusters", "sagnac-b1.conf"),
+						"API_PORT=6560\nCONTRAT=3\n", 0o644)
+				}
 			} else {
 				dir, _ = fixture(t, c.meta, map[string]string{"one.sh": "sagnac_reussite"}, "ONE_BAD")
 			}
@@ -505,6 +512,21 @@ func TestRunCeiling(t *testing.T) {
 		var kit *KitError
 		if c.ok != (err == nil) || (!c.ok && !errors.As(err, &kit)) {
 			t.Errorf("timeout_s %s with a cluster and GenAI: error %v, accepted %v", c.timeout, err, c.ok)
+		}
+	}
+	// Without GenAI, a check of a lab with a cluster stays within 60 s, even
+	// though the run may last 240 s (reference executor: PLAFOND_S[genai]).
+	for _, c := range []struct {
+		timeout string
+		ok      bool
+	}{{"60", true}, {"61", false}, {"240", false}} {
+		meta := strings.Replace(clusterMeta, "    preconditions: [CLUSTER_MISSING]\n",
+			"    preconditions: [CLUSTER_MISSING]\n    timeout_s: "+c.timeout+"\n", 1)
+		dir, _ := clusterFixture(t, meta, map[string]string{"one.sh": "sagnac_reussite"})
+		_, err := LoadLab(dir)
+		var kit *KitError
+		if c.ok != (err == nil) || (!c.ok && !errors.As(err, &kit)) {
+			t.Errorf("timeout_s %s with a cluster: error %v, accepted %v", c.timeout, err, c.ok)
 		}
 	}
 }
