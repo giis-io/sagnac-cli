@@ -114,11 +114,11 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
   (`ORACLE_INVALID_OUTPUT`), code absent de `codes` ou de `preconditions`
   (`ORACLE_UNDECLARED_CODE`), contrôle tué par une interruption
   (`ORACLE_CHECK_INTERRUPTED`).
-- **Plafond.** 60 s par passage, 240 s pour un lab GenAI, 360 s pour un lab
-  à cluster avec GenAI (section 7) ; le délai d'un contrôle reste borné par
-  `timeout_s` (section 2). Au-delà, les contrôles restants rendent
-  `ORACLE_TOTAL_TIMEOUT`. Le plafond ne compte que les contrôles : il démarre
-  après l'attente des services ci-dessous.
+- **Plafond.** 60 s par passage sans cluster ni GenAI, 240 s avec l'un des
+  deux, 360 s pour un lab à cluster avec GenAI (section 7) ; le délai d'un
+  contrôle reste borné par `timeout_s` (section 2). Au-delà, les contrôles
+  restants rendent `ORACLE_TOTAL_TIMEOUT`. Le plafond ne compte que les
+  contrôles : il démarre après l'attente des services ci-dessous.
 - **Attente des services.** Avant le plafond, et avant de demander la session
   au serveur, `check` attend que les services du lab répondent, 180 s au plus.
   Aujourd'hui, le seul service est le cluster que déclare la clé `cluster` de
@@ -296,7 +296,7 @@ local, partagé entre les labs d'un parcours (`sagnac-b1` pour B1-M2 à M6).
 `sagnac check` ne le crée jamais.
 
 - **Kit.** `<nom>` (`[a-z0-9][a-z0-9-]{0,31}`) désigne
-  `_cadre/clusters/<nom>.conf`, lignes `CLE=valeur` dont la première
+  `_cadre/clusters/<nom>.conf`, lignes `CLE=valeur` (section 7 bis) dont
   `API_PORT` (1 à 65535) donne le port de l'API sur `127.0.0.1`. Le lab
   déclare aussi `docker: true`, dans `tools` au moins `k3d`, `kubectl`, `k3s`,
   `k3s-airgap` et `k3d-tools`, et les préconditions `CLUSTER_DIRTY` et
@@ -324,6 +324,36 @@ local, partagé entre les labs d'un parcours (`sagnac-b1` pour B1-M2 à M6).
   contrôle. Rien d'autre ne passe : ni Internet, ni un autre port de l'hôte,
   ni le moteur (`/run` et `/var/run` recouverts d'un `tmpfs`). Le kubeconfig
   reste valide tel quel. Le ramassage passe par la même enveloppe.
-- **Plafond.** Un passage d'un lab à cluster avec GenAI a 360 s : ses
-  contrôles démarrent des charges sur le cluster avant d'interroger le
-  modèle. `timeout_s` de chacun reste à 240 s au plus.
+- **Plafond.** Un passage d'un lab à cluster a 240 s, 360 s avec GenAI,
+  quel que soit le contrat du cluster : ses contrôles démarrent des charges
+  sur le cluster avant de juger quoi que ce soit. `timeout_s` de chacun
+  reste à 60 s au plus, 240 s avec GenAI (section 2).
+
+## 7 bis. Contrat du cluster (v2, v3)
+
+La version du contrat est portée par le cluster, jamais par `meta.yaml` :
+`_cadre/clusters/<nom>.conf` sans ligne `CONTRAT` est un cluster du contrat
+v2 (`sagnac-b1`), avec `CONTRAT=3` un cluster du contrat v3 (`sagnac-b3`,
+B3-M3 à M5).
+
+- **Lecture de la conf.** Lignes vides et lignes qui commencent par `#`
+  ignorées. Seules les clés `API_PORT` et `CONTRAT`, chacune une fois au
+  plus, valeur prise telle quelle (sans retrait d'espaces) ; `CONTRAT`
+  absent ou `3`. Toute autre ligne ou valeur (`CONTRAT=9`, clé d'un contrat
+  plus récent, clé en double, ligne indentée) refuse le kit :
+  `ORACLE_INVALID_KIT`, code 3, avant tout contrôle, sans session ni envoi.
+  Une CLI qui ne connaît pas le contrat d'un cluster ne juge jamais ses
+  labs ; la mettre à jour règle le refus.
+- **Contrat v3.** Le code de l'élève ne tourne plus sur le poste pendant
+  `check` : les contrôles le placent dans des pods des espaces élèves du
+  cluster, sous les seuls droits du RBAC de l'élève. Pour la CLI, rien ne
+  change dans l'appel des contrôles, le ramassage (`lib/cluster-nettoyage.sh`
+  reconnaît lui-même le v3), le verrou ni la coupure du réseau ; seul le
+  port de l'API diffère. Les contrôles d'un lab v3 utilisent `python3` du
+  poste (`lib/k8s_v3.py`, code du cadre) ; son absence est une précondition
+  du lab, pas une erreur de la CLI.
+- **Kit v3.** En plus des fichiers de la section 7, le kit porte
+  `_cadre/clusters/v3/` (politique d'audit, garde-fous, socle, gabarits),
+  que `_cadre/bin/sagnac-cluster` copie dans
+  `~/.cache/sagnac/clusters/<nom>/v3/` à la création du cluster. La CLI les
+  dépose tels quels et ne les lit pas.

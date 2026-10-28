@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -154,6 +155,11 @@ func labStates(t *testing.T, labDir string) []state {
 			expected = append(expected, f["check"].(string)+":"+f["code"].(string))
 		}
 		sort.Strings(expected)
+		// scope: replay (a bypass that only the hidden set of the replay
+		// catches, contract section 12): green on the workstation.
+		if scope, _ := decl["scope"].(string); scope == "replay" {
+			exit, expected = 0, nil
+		}
 		states = append(states, state{name: "mutant " + filepath.Base(filepath.Dir(m)), base: base,
 			mutant: filepath.Dir(m), exit: int(exit), failures: expected})
 	}
@@ -290,9 +296,12 @@ func crossCheckCluster(t *testing.T, reference, labDir string, lab *Lab) {
 		only(t, compareWithReference(t, reference, lab, labDir, workspace(len(states), solution), "busy"), codeClusterBusy)
 	})
 
-	t.Run("dirty", func(t *testing.T) {
+	// dirty: a stand-in kubectl that always lists a leftover pod. On a
+	// cluster of the contract v3 it also lists one student namespace, so that
+	// lib/cluster-nettoyage.sh takes its v3 branch (VAP, student namespaces,
+	// sagnac-oracle) instead of sagnac-check.
+	dirty := func(t *testing.T, kubectl, name string, i int) string {
 		dir := cache(t)
-		kubectl := "#!/bin/sh\ncase \"$*\" in *readyz*) exit 0 ;; *\"-o name\"*) echo pod/leftover ;; esac\nexit 0\n"
 		if err := os.WriteFile(filepath.Join(dir, "kubectl"), []byte(kubectl), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -304,8 +313,24 @@ func crossCheckCluster(t *testing.T, reference, labDir string, lab *Lab) {
 			t.Fatal(err)
 		}
 		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-		only(t, compareWithReference(t, reference, lab, labDir, workspace(len(states)+1, solution), "dirty"), codeClusterDirty)
+		only(t, compareWithReference(t, reference, lab, labDir, workspace(i, solution), name), codeClusterDirty)
+		return dir
+	}
+	t.Run("dirty", func(t *testing.T) {
+		dirty(t, "#!/bin/sh\ncase \"$*\" in *readyz*) exit 0 ;; *\"-o name\"*) echo pod/leftover ;; esac\nexit 0\n",
+			"dirty", len(states)+1)
 	})
+	if lab.ClusterContract == 3 {
+		t.Run("dirty v3", func(t *testing.T) {
+			dir := dirty(t, "#!/bin/sh\necho \"$*\" >> \"$(dirname \"$0\")/calls\"\n"+
+				"case \"$*\" in *readyz*) exit 0 ;; *\"get namespaces -l\"*) printf 'sandbox ' ;;\n"+
+				"*\"-o name\"*) echo pod/leftover ;; esac\nexit 0\n", "dirty v3", len(states)+2)
+			if calls := readFile(t, filepath.Join(dir, "calls")); !strings.Contains(calls, "validatingadmissionpolicies") ||
+				!strings.Contains(calls, "-n sandbox") {
+				t.Errorf("the cleanup did not take its v3 branch:\n%s", calls)
+			}
+		})
+	}
 }
 
 // comparable decodes a result and drops what changes from one run to the

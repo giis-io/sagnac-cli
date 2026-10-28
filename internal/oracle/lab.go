@@ -21,8 +21,8 @@ const (
 )
 
 // capSeconds bounds timeout_s of one check: 60 s without GenAI, 240 s with.
-// It is also the ceiling of one run, except for a lab with a cluster and
-// GenAI (runCeilingSeconds).
+// It is also the ceiling of one run of a lab without a cluster
+// (runCeilingSeconds).
 func capSeconds(genAI bool) int64 {
 	if genAI {
 		return 240
@@ -30,16 +30,24 @@ func capSeconds(genAI bool) int64 {
 	return 60
 }
 
-// clusterGenAICeilingSeconds is the ceiling of one run of a lab with a
-// cluster and GenAI: its checks start workloads on the cluster before they
-// can ask anything, and 240 s left no margin on a loaded machine.
-const clusterGenAICeilingSeconds = 360
+// Ceilings of one run of a lab with a cluster, whatever the version of its
+// contract: its checks start workloads on the cluster before they can judge
+// anything (90 to 200 s for the labs of the contract v3), and 240 s left no
+// margin to a lab with GenAI on a loaded machine.
+const (
+	clusterCeilingSeconds      = 240
+	clusterGenAICeilingSeconds = 360
+)
 
 // runCeilingSeconds is the ceiling of one run of the lab (docs/contrat.md,
-// section 3): 60 s, 240 s with GenAI, 360 s with GenAI and a cluster.
+// section 3): 60 s without a cluster or GenAI, 240 s with one of them, 360 s
+// with both.
 func runCeilingSeconds(lab *Lab) int64 {
-	if lab.GenAI && lab.Cluster != "" {
-		return clusterGenAICeilingSeconds
+	if lab.Cluster != "" {
+		if lab.GenAI {
+			return clusterGenAICeilingSeconds
+		}
+		return clusterCeilingSeconds
 	}
 	return capSeconds(lab.GenAI)
 }
@@ -124,9 +132,12 @@ type Lab struct {
 	Docker bool
 	// Cluster is the name of the local Kubernetes cluster of the lab, empty
 	// without one (docs/contrat.md, section 7); APIPort is the port of its
-	// API on 127.0.0.1, read in _cadre/clusters/<name>.conf.
-	Cluster string
-	APIPort int
+	// API on 127.0.0.1 and ClusterContract the version of its contract (2,
+	// or 3 with CONTRAT=3, section 7 bis), both read in
+	// _cadre/clusters/<name>.conf.
+	Cluster         string
+	APIPort         int
+	ClusterContract int
 	// Teardown is checks/teardown.sh when the lab has one, run after the
 	// last check.
 	Teardown string
