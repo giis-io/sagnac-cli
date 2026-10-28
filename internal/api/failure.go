@@ -19,6 +19,11 @@ const (
 	codeAPIPrefix   = "API_CODE_"
 	codeEntitlement = "ENTITLEMENT_INACTIVE"
 	codeCLITooOld   = "CLI_TOO_OLD"
+	codeKitLimit    = "KIT_DOWNLOAD_LIMIT"
+	// retryAtLayout is the only form of retry_at: UTC, ISO 8601, to the second.
+	retryAtLayout = "2006-01-02T15:04:05Z"
+	// maxLimit bounds the field "limit" of KIT_DOWNLOAD_LIMIT.
+	maxLimit = 1_000_000
 )
 
 var (
@@ -40,6 +45,13 @@ var (
 //
 // RetryAfter is the Retry-After of the answer (429 TOO_MANY_REQUESTS), in
 // whole seconds, at most MaxDelay; 0 when absent or unreadable.
+//
+// RetryAt is the field "retry_at" of a 429 (UTC, "2006-01-02T15:04:05Z"),
+// kept only in that exact form; the zero time otherwise. Whoever uses it
+// checks that it is a plausible instant.
+//
+// Limit is the field "limit" of KIT_DOWNLOAD_LIMIT, kept only when it is a
+// whole number between 1 and maxLimit; 0 otherwise.
 type APIError struct {
 	Status     int
 	Code       string
@@ -47,6 +59,8 @@ type APIError struct {
 	URL        string
 	Minimum    string
 	RetryAfter time.Duration
+	RetryAt    time.Time
+	Limit      int
 }
 
 // MaxDelay bounds a Retry-After read by Failure: it is only shown, never
@@ -91,6 +105,8 @@ func Failure(resp *http.Response) error {
 		State   *string `json:"state"`
 		URL     any     `json:"url"`
 		Minimum any     `json:"minimum"`
+		RetryAt any     `json:"retry_at"`
+		Limit   any     `json:"limit"`
 	}
 	if json.Unmarshal(raw, &body) == nil && reCode.MatchString(body.Code) {
 		e := &APIError{Status: resp.StatusCode, Code: body.Code, RetryAfter: Delay(resp.Header.Get("Retry-After"))}
@@ -102,6 +118,14 @@ func Failure(resp *http.Response) error {
 		}
 		if body.Code == codeEntitlement && body.State != nil && reState.MatchString(*body.State) {
 			e.State = *body.State
+		}
+		if r, ok := body.RetryAt.(string); ok {
+			if at, err := time.Parse(retryAtLayout, r); err == nil {
+				e.RetryAt = at
+			}
+		}
+		if n, ok := body.Limit.(float64); ok && body.Code == codeKitLimit && n >= 1 && n <= maxLimit && n == float64(int(n)) {
+			e.Limit = int(n)
 		}
 		return e
 	}

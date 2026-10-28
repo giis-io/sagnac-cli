@@ -248,6 +248,9 @@ script qui enchaîne `sagnac check` doit pouvoir s'y fier quel que soit l'état
 de la plateforme ; le 429 se lit dans le message. Les autres commandes rendent
 2 sur un 429, comme sur un 5xx : l'opération n'a pas eu lieu et ne dépend pas
 d'une action de l'élève.
+Seule exception : `KIT_DOWNLOAD_LIMIT` (429, plafond de kits différents sur
+24 heures) rend 1, car le compte doit attendre la sortie d'un kit de la
+fenêtre (`docs/api/erreurs.md` de la plateforme).
 
 ## 5 bis. `sagnac clean`
 

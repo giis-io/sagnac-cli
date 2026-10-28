@@ -118,13 +118,14 @@ une étiquette de publication (`v0.1.0`), c'est l'étiquette exacte.
 |---|---|
 | `sagnac login` | Connecte cet ordinateur à votre compte (code à saisir dans le navigateur). Vide la file des résultats en attente et les copies hors ligne des énoncés laissées par la connexion précédente. |
 | `sagnac logout` | Déconnecte cet ordinateur, révoque ses jetons, vide la file des résultats en attente et supprime les copies hors ligne des énoncés. |
-| `sagnac pull LAB` | Télécharge le kit d'un lab dans le dossier courant et vérifie son empreinte. |
-| `sagnac open LAB` | Ouvre l'énoncé d'un lab et en garde une copie lisible hors ligne. |
+| `sagnac pull LAB` | Télécharge le kit d'un lab dans le dossier courant et vérifie son empreinte. Un compte télécharge au plus 30 kits différents sur 24 heures (un kit repris dans la fenêtre ne compte pas) ; au-delà, la commande donne le plafond et l'heure locale de reprise, et s'arrête avec le code 1, sans nouvel essai. Les kits déjà présents restent utilisables. |
+| `sagnac open LAB` | Ouvre l'énoncé d'un lab et en garde une copie lisible hors ligne. Si la plateforme limite la lecture des énoncés (trop de demandes, ou trop d'énoncés nouveaux sur 24 heures), la commande donne l'heure locale de reprise et s'arrête avec le code 2, sans nouvel essai ; les copies déjà récupérées restent lisibles. |
 | `sagnac check [LAB]` | Vérifie le dossier `workspace/` du lab, affiche le résultat et l'envoie à votre compte comme tentative déclarée. Sans réseau, le résultat attend dans `$XDG_STATE_HOME/sagnac/queue/` (30 jours). `--json` : le résultat en JSON. |
 | `sagnac check --show-payload` | Lance les contrôles, puis affiche les deux requêtes que `sagnac check` enverrait à la plateforme (`POST /v1/sessions`, `POST /v1/attempts`), en-têtes et corps compris, sans rien envoyer ni contacter. Le jeton n'est jamais affiché. Voir `docs/contrat.md`, section 4 bis. |
 | `sagnac clean [--all] [--dry-run]` | Supprime le cluster du lab courant (tous les clusters avec `--all`) et les fichiers temporaires du cache de Sagnac. Garde les modèles, les outils, les images de base, votre `workspace/` et les résultats en attente. `--dry-run` affiche ce qui serait supprimé. Voir `docs/contrat.md`, section 5 bis. |
 | `sagnac purge` | Supprime les résultats en attente d'envoi. |
 | `sagnac doctor` | Signale une version plus récente, un avis de sécurité et la fin de support proche. Fonctionne sans compte. |
+| `sagnac doctor --share` | Fait le même diagnostic et envoie le rapport à Sagnac (`POST /v1/doctor/reports`, schéma `sagnac-doctor/1`) : version de `sagnac`, système, architecture, et pour chaque point un identifiant, un état et un code. Ni compte, ni jeton, ni chemin, ni nom d'utilisateur ou de poste. Affiche l'identifiant du rapport, à donner au support. Si l'envoi échoue, le rapport reste affiché : code 2 si la plateforme limite les envois ou ne répond pas, 3 si elle refuse le rapport. |
 | `sagnac version` | Affiche la version, la date de fin de support, l'éditeur et le contact sécurité. |
 | `sagnac help` | Affiche l'aide. |
 
@@ -168,7 +169,7 @@ Mêmes codes pour toutes les commandes (`login`, `logout`, `pull`, `open`,
 | Code | Sens |
 |---|---|
 | 0 | réussite |
-| 1 | refus : vous ou votre compte devez agir (droit inactif, lab inconnu, connexion à refaire, dossier du lab déjà présent ou cadre différent, contrôles de `check` en échec, point à corriger signalé par `doctor`) |
+| 1 | refus : vous ou votre compte devez agir (droit inactif, lab inconnu, connexion à refaire, dossier du lab déjà présent ou cadre différent, plafond de kits sur 24 heures atteint, contrôles de `check` en échec, point à corriger signalé par `doctor`) |
 | 2 | l'environnement ne permet pas l'opération maintenant : réseau coupé, proxy, certificat refusé, délai dépassé, trop de demandes (429), serveur occupé ou en erreur (5xx) ; pour `check`, précondition de plateforme absente |
 | 3 | erreur de stockage (disque, droits, trousseau) ou erreur imprévue (réponse du serveur hors contrat, kit refusé, erreur interne) |
 | 64 | mauvaise utilisation (commande, option ou argument inconnu) |
