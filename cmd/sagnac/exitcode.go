@@ -61,6 +61,7 @@ var refusalCodes = map[string]bool{
 	codeUnknownKit:                      true,
 	codeInvalidSession:                  true,
 	codeTooManyDevice:                   true,
+	codeKitDownloadLimit:                true,
 	"OFFLINE_INSTRUCTIONS_NOT_INCLUDED": true,
 }
 
@@ -109,7 +110,9 @@ func serverUnreachable(err error) bool {
 	case errors.As(err, &status):
 		return status.Status >= 500 || status.Status == http.StatusTooManyRequests
 	case errors.As(err, &apiErr):
-		return apiErr.Status >= 500 || apiErr.Status == http.StatusTooManyRequests
+		// A code that asks the account to act stays a refusal whatever its
+		// status (KIT_DOWNLOAD_LIMIT is a 429).
+		return !refusalCodes[apiErr.Code] && (apiErr.Status >= 500 || apiErr.Status == http.StatusTooManyRequests)
 	}
 	return false
 }

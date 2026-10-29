@@ -109,14 +109,23 @@ func startupNotices(ctx context.Context, plan noticePlan, stderr io.Writer) {
 // release, the end of support. It needs no account and sends no token.
 // Exit code 1 when a point has to be fixed, 0 otherwise (a check that could
 // not be made is not a failure); exitCodeOf gives the others.
+//
+// With --share, the same points go to the platform as a sagnac-doctor/1
+// report (doctor_share.go); a report that does not reach it gives the code
+// of that failure, the diagnosis staying shown.
 func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	share := false
 	for _, a := range args {
-		if strings.HasPrefix(a, "-") {
+		switch {
+		case a == "--share":
+			share = true
+		case strings.HasPrefix(a, "-"):
 			fmt.Fprintln(stderr, i18n.T("error.unknown_option", a))
-		} else {
+			return exitCodeOf(errUsage)
+		default:
 			fmt.Fprintln(stderr, i18n.T("error.unexpected_argument", a, "doctor"))
+			return exitCodeOf(errUsage)
 		}
-		return exitCodeOf(errUsage)
 	}
 	toFix := 0
 	fmt.Fprintln(stdout, i18n.T("doctor.title", version))
@@ -131,7 +140,9 @@ func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, i18n.T("error.interrupted"))
 		return exitCodeOf(ctx.Err())
 	}
+	versionCheck := doctorCheck{ID: "version", Status: checkSkip}
 	if st.Err != nil {
+		versionCheck.Code = "VERSION_UNVERIFIED"
 		fmt.Fprintln(stdout, i18n.T("doctor.unverified"))
 	}
 	if info := st.Info; info != nil {
@@ -140,31 +151,44 @@ func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int
 			// A development build has no number to compare.
 		case c >= 0:
 			if st.Err == nil {
+				versionCheck = doctorCheck{ID: "version", Status: checkOK}
 				fmt.Fprintln(stdout, i18n.T("doctor.up_to_date", info.Latest))
 			}
 		case info.Security:
 			toFix++
+			versionCheck = doctorCheck{ID: "version", Status: checkFail, Code: "SECURITY_RELEASE"}
 			fmt.Fprintln(stdout, i18n.T("doctor.security", info.Latest, info.Advisory, version))
 		default:
 			toFix++
+			versionCheck = doctorCheck{ID: "version", Status: checkFail, Code: "NEWER_VERSION"}
 			fmt.Fprintln(stdout, i18n.T("doctor.newer", info.Latest, version))
 		}
 	}
 
+	supportCheck := doctorCheck{ID: "support", Status: checkOK}
 	switch kind, month := supportState(clock()); kind {
 	case "ended":
 		toFix++
+		supportCheck = doctorCheck{ID: "support", Status: checkFail, Code: "SUPPORT_ENDED"}
 		fmt.Fprintln(stdout, i18n.T("doctor.support_ended", month))
 	case "soon":
+		supportCheck = doctorCheck{ID: "support", Status: checkWarn, Code: "SUPPORT_ENDS_SOON"}
 		fmt.Fprintln(stdout, i18n.T("doctor.support_soon", month))
 	default:
 		fmt.Fprintln(stdout, i18n.T("doctor.support_ok", endOfSupport))
 	}
 
+	code := exitOK
 	if toFix == 0 {
 		fmt.Fprintln(stdout, i18n.T("doctor.nothing"))
-		return exitOK
+	} else {
+		fmt.Fprintln(stdout, i18n.T("doctor.to_fix", toFix))
+		code = exitCodeOf(errRefused)
 	}
-	fmt.Fprintln(stdout, i18n.T("doctor.to_fix", toFix))
-	return exitCodeOf(errRefused)
+	if share {
+		if shared := runShare(ctx, []doctorCheck{versionCheck, supportCheck}, stdout, stderr); shared != exitOK {
+			return shared
+		}
+	}
+	return code
 }

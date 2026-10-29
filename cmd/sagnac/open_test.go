@@ -31,6 +31,20 @@ type instructionsServer struct {
 	pageURL     string // "url" of the 403; "" : the page of this server
 	api         string
 	badType     bool
+	// limited: the labs whose instructions answer 429 TOO_MANY_REQUESTS
+	// ("*": also the list of a module), with limitBody and limitAfter.
+	limited    map[string]bool
+	limitBody  string
+	limitAfter string
+}
+
+func (s *instructionsServer) tooMany(w http.ResponseWriter) {
+	if s.limitAfter != "" {
+		w.Header().Set("Retry-After", s.limitAfter)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusTooManyRequests)
+	fmt.Fprint(w, s.limitBody)
 }
 
 func (s *instructionsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +62,10 @@ func (s *instructionsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprintf(w, `{"lab": %q, "version": %d, "kit_sha256": %q}`, lab, v, strings.Repeat("a", 64))
+	case r.URL.Path == "/v1/instructions" && s.limited["*"]:
+		s.tooMany(w)
+	case strings.HasPrefix(r.URL.Path, "/v1/instructions/") && s.limited[strings.TrimPrefix(r.URL.Path, "/v1/instructions/")]:
+		s.tooMany(w)
 	case r.URL.Path == "/v1/instructions":
 		labs, ok := s.modules[r.URL.Query().Get("module")]
 		if !ok {
@@ -573,5 +591,93 @@ func TestInsufficientScopeMessageDependsOnMode(t *testing.T) {
 		if !session && !strings.Contains(out, "sagnac login") {
 			t.Errorf("no session: %q", out)
 		}
+	}
+}
+
+// withLocalZone runs the test in a fixed local zone and at a fixed instant.
+func withLocalZone(t *testing.T, now time.Time) {
+	t.Helper()
+	oldLocal, oldClock := time.Local, clock
+	time.Local = time.FixedZone("CEST", 2*3600)
+	clock = func() time.Time { return now }
+	t.Cleanup(func() { time.Local, clock = oldLocal, oldClock })
+}
+
+// The reading rate of the instructions (3-4c1): the local time of resumption
+// from retry_at, else from Retry-After, rounded up to the minute; code 2; one
+// request only, no new try.
+func TestOpenTooManyRequests(t *testing.T) {
+	now := time.Date(2026, 10, 24, 11, 0, 0, 0, time.UTC) // 13:00 local
+	cases := []struct {
+		name, body, after, want string
+	}{
+		{"retry_at today", `{"code": "TOO_MANY_REQUESTS", "retry_at": "2026-10-24T12:35:00Z"}`, "5700",
+			i18n.T("open.rate_limited", i18n.T("resume.today", "14:35"))},
+		{"retry_at tomorrow", `{"code": "TOO_MANY_REQUESTS", "retry_at": "2026-10-25T07:10:00Z"}`, "72600",
+			i18n.T("open.rate_limited", i18n.T("resume.date", "25/10/2026", "09:10"))},
+		{"Retry-After only", `{"code": "TOO_MANY_REQUESTS"}`, "45",
+			i18n.T("open.rate_limited", i18n.T("resume.today", "13:01"))},
+		{"retry_at unreadable", `{"code": "TOO_MANY_REQUESTS", "retry_at": "soon"}`, "600",
+			i18n.T("open.rate_limited", i18n.T("resume.today", "13:10"))},
+		{"retry_at in the past", `{"code": "TOO_MANY_REQUESTS", "retry_at": "2026-10-24T10:00:00Z"}`, "120",
+			i18n.T("open.rate_limited", i18n.T("resume.today", "13:02"))},
+		{"nothing", `{"code": "TOO_MANY_REQUESTS"}`, "", i18n.T("open.rate_limited_later")},
+	}
+	for _, c := range cases {
+		o := newOpenRig(t)
+		withLocalZone(t, now)
+		o.ins.limited = map[string]bool{"hello": true}
+		o.ins.limitBody, o.ins.limitAfter = c.body, c.after
+		code, stdout, stderr := o.run(t, "open", "hello")
+		if code != exitEnvironment || stdout != "" || !strings.Contains(stderr, c.want) {
+			t.Errorf("%s: code %d, stdout %q, stderr %q, want %q", c.name, code, stdout, stderr, c.want)
+		}
+		if n := strings.Count(strings.Join(o.ins.seen(), " "), "/v1/instructions/hello"); n != 1 {
+			t.Errorf("%s: %d requests of the instructions, want 1 (no new try)", c.name, n)
+		}
+		if len(o.launched) != 0 {
+			t.Errorf("%s: opened %v", c.name, o.launched)
+		}
+	}
+}
+
+// A module stopped by the rate: what was received stays in the cache and is
+// listed; the message gives the time of resumption; code 2.
+func TestOpenModuleTooManyRequestsKeepsWhatWasReceived(t *testing.T) {
+	o := newOpenRig(t)
+	withLocalZone(t, time.Date(2026, 10, 24, 11, 0, 0, 0, time.UTC))
+	o.ins.limited = map[string]bool{"bonjour": true}
+	o.ins.limitBody = `{"code": "TOO_MANY_REQUESTS", "retry_at": "2026-10-24T11:01:00Z"}`
+	o.ins.limitAfter = "60"
+	code, stdout, stderr := o.run(t, "open", "B1-M1")
+	if code != exitEnvironment {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	for _, want := range []string{i18n.T("open.module_partial", "B1-M1", 1, 2), o.copyPath("hello-v3.html")} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout lacks %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "bonjour") {
+		t.Errorf("stdout lists a lab not received:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, i18n.T("open.rate_limited", i18n.T("resume.today", "13:01"))) {
+		t.Errorf("stderr %q", stderr)
+	}
+	if _, err := os.Stat(o.copyPath("hello-v3.html")); err != nil {
+		t.Errorf("copy received before the refusal: %v", err)
+	}
+	if _, err := os.Stat(o.copyPath("bonjour-v2.html")); !os.IsNotExist(err) {
+		t.Errorf("copy of the refused lab: %v", err)
+	}
+
+	// Refused on the list of the module: nothing received, no summary.
+	o = newOpenRig(t)
+	withLocalZone(t, time.Date(2026, 10, 24, 11, 0, 0, 0, time.UTC))
+	o.ins.limited = map[string]bool{"*": true}
+	o.ins.limitBody, o.ins.limitAfter = `{"code": "TOO_MANY_REQUESTS"}`, "30"
+	code, stdout, stderr = o.run(t, "open", "B1-M1")
+	if code != exitEnvironment || stdout != "" || !strings.Contains(stderr, i18n.T("open.rate_limited", i18n.T("resume.today", "13:01"))) {
+		t.Errorf("list refused: code %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 }

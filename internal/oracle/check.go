@@ -105,7 +105,7 @@ func readResult(path string, c *Check) (code *string, observed, expected any, er
 func elapsedMS(start time.Time) int64 { return time.Since(start).Milliseconds() }
 
 // runCheck runs one check script in the workspace, in its own session, with
-// the reduced environment of the contract (section 2, plus XDG_CONFIG_HOME on
+// the reduced environment of the contract (section 3, plus XDG_CONFIG_HOME on
 // an empty directory; nothing of the account, no session bus), and maps its exit code and result
 // file to a CheckResult. Everything the check started is killed at its end.
 //
@@ -159,6 +159,7 @@ func runCheck(ctx context.Context, lab *Lab, c *Check, workspace string, seed in
 		"SAGNAC_RESULT=" + resultFile,
 		"SAGNAC_LIB=" + lab.libPath,
 	}
+	cmd.Env = append(cmd.Env, commonEnv(lab)...)
 	// Pipes, not /dev/null: like the reference, the run lasts until the
 	// check has exited and its outputs are closed, within the delay.
 	outR, outW, err := os.Pipe()

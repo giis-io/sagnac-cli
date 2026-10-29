@@ -1,5 +1,5 @@
 {
-  "usage": "Utilisation : sagnac [--lang LANGUE] <commande>\n\nCommandes :\n  login      Connecte cet ordinateur à votre compte.\n  logout     Déconnecte cet ordinateur et révoque ses jetons.\n  pull LAB   Télécharge le kit d'un lab dans le dossier courant.\n  open CIBLE Ouvre l'énoncé d'un lab, ou enregistre ceux d'un module pour la lecture hors ligne.\n  check [LAB] Vérifie votre travail dans le dossier workspace/ du lab et envoie le résultat à votre compte.\n  doctor     Vérifie la version, les avis de sécurité et la fin de support.\n  clean      Supprime le cluster et les fichiers temporaires du lab (tous avec --all) ; garde modèles et images de base.\n  purge      Supprime les résultats en attente d'envoi sur cet ordinateur.\n  version    Affiche la version, la fin de support et le contact sécurité.\n  help       Affiche cette aide (aussi : -h, --help).\n\nOptions :\n  --lang LANGUE   Langue des messages (fr).\n  --version N     Avec pull : version du lab (par défaut, la version courante).\n  --text          Avec open : affiche l'énoncé d'un lab dans le terminal.\n  --json          Avec check : affiche le résultat en JSON, sans autre texte sur la sortie standard.\n  --all           Avec clean : tous les labs, pas seulement le lab courant.\n  --dry-run       Avec clean : affiche ce qui serait supprimé, sans rien supprimer.\n  --show-payload  Avec check : affiche ce que « sagnac check » enverrait au serveur, sans rien envoyer.\n  --session       Avec pull, open ou check : connexion gardée en mémoire le temps de la commande, rien d'écrit sur le disque.\n",
+  "usage": "Utilisation : sagnac [--lang LANGUE] <commande>\n\nCommandes :\n  login      Connecte cet ordinateur à votre compte.\n  logout     Déconnecte cet ordinateur et révoque ses jetons.\n  pull LAB   Télécharge le kit d'un lab dans le dossier courant.\n  open CIBLE Ouvre l'énoncé d'un lab, ou enregistre ceux d'un module pour la lecture hors ligne.\n  check [LAB] Vérifie votre travail dans le dossier workspace/ du lab et envoie le résultat à votre compte.\n  doctor     Vérifie la version, les avis de sécurité et la fin de support.\n  clean      Supprime le cluster et les fichiers temporaires du lab (tous avec --all) ; garde modèles et images de base.\n  purge      Supprime les résultats en attente d'envoi sur cet ordinateur.\n  version    Affiche la version, la fin de support et le contact sécurité.\n  help       Affiche cette aide (aussi : -h, --help).\n\nOptions :\n  --lang LANGUE   Langue des messages (fr).\n  --version N     Avec pull : version du lab (par défaut, la version courante).\n  --text          Avec open : affiche l'énoncé d'un lab dans le terminal.\n  --json          Avec check : affiche le résultat en JSON, sans autre texte sur la sortie standard.\n  --all           Avec clean : tous les labs, pas seulement le lab courant.\n  --dry-run       Avec clean : affiche ce qui serait supprimé, sans rien supprimer.\n  --show-payload  Avec check : affiche ce que « sagnac check » enverrait au serveur, sans rien envoyer.\n  --share         Avec doctor : envoie le rapport à Sagnac, sans compte ni identifiant du poste.\n  --session       Avec pull, open ou check : connexion gardée en mémoire le temps de la commande, rien d'écrit sur le disque.\n",
   "version.line": "sagnac %s",
   "version.publisher": "Éditeur : %s",
   "version.end_of_support": "Fin de support : %s",
@@ -54,6 +54,10 @@
   "pull.stat_failed": "Impossible de vérifier si le dossier « %s » existe ici (droits du dossier courant). Rien n'a été téléchargé. Vérifiez les droits du dossier, puis relancez la commande.",
   "error.session_ended": "La connexion de cette commande n'est plus valable. Relancez la même commande avec --session : une nouvelle connexion vous sera demandée.",
   "pull.insufficient_scope": "Votre connexion ne donne pas accès aux kits. Lancez « sagnac logout », puis « sagnac login ».",
+  "pull.kit_limit": "Votre compte a téléchargé %d kits différents au cours des dernières 24 heures, le plafond : ce kit n'est pas téléchargé. Les kits déjà présents sur ce poste restent utilisables.",
+  "pull.kit_limit_unknown": "Votre compte a atteint le plafond de kits différents téléchargés sur 24 heures : ce kit n'est pas téléchargé. Les kits déjà présents sur ce poste restent utilisables.",
+  "pull.kit_limit_resume": "Vous pourrez télécharger ce kit %s (heure locale).",
+  "pull.kit_limit_resume_later": "Réessayez plus tard.",
   "open.target_missing": "Indiquez le lab ou le module à ouvrir, par exemple « sagnac open hello » ou « sagnac open B1-M1 ».",
   "open.invalid_target": "« %s » n'est pas un lab ni un module : un lab s'écrit en lettres minuscules, chiffres et tirets, un module comme B1-M1.",
   "open.text_module": "L'option --text s'applique à un lab. Pour un module, « sagnac open B1-M1 » enregistre les énoncés sans les ouvrir.",
@@ -77,6 +81,11 @@
   "open.entitlement_cancelled": "Votre abonnement est résilié : l'énoncé n'est pas ouvert.",
   "open.entitlement_expired": "Votre abonnement a expiré : l'énoncé n'est pas ouvert.",
   "open.entitlement_inactive": "Votre compte n'a pas d'abonnement actif : l'énoncé n'est pas ouvert.",
+  "open.rate_limited": "La plateforme reçoit trop de demandes d'énoncés de ce compte : rien n'est récupéré. Réessayez %s (heure locale). Les énoncés déjà récupérés restent lisibles : leurs copies sont dans $XDG_CACHE_HOME/sagnac/instructions ou ~/.cache/sagnac/instructions.",
+  "open.rate_limited_later": "La plateforme reçoit trop de demandes d'énoncés de ce compte : rien n'est récupéré. Réessayez dans quelques minutes. Les énoncés déjà récupérés restent lisibles : leurs copies sont dans $XDG_CACHE_HOME/sagnac/instructions ou ~/.cache/sagnac/instructions.",
+  "open.module_partial": "Module %s : %d énoncés sur %d enregistrés pour la lecture hors ligne avant le refus de la plateforme.",
+  "resume.today": "à %s",
+  "resume.date": "le %s à %s",
   "error.scope_session": "Votre connexion ne donne pas accès à cette ressource. Relancez la même commande avec --session : une nouvelle connexion vous sera demandée.",
   "open.cache_warning": "L'énoncé est affiché, mais la copie locale n'a pas pu être écrite (droits ou disque plein). Vérifiez le dossier de cache, $XDG_CACHE_HOME/sagnac ou ~/.cache/sagnac.",
   "check.invalid_lab": "« %s » n'est pas un identifiant de lab : lettres minuscules, chiffres et tirets, 48 caractères au plus.",
@@ -171,5 +180,11 @@
   "check.payload_token": "Bearer <jeton de votre connexion>",
   "check.payload_key": "<clé tirée au moment de l'envoi>",
   "check.payload_note": "La session et la graine viennent du serveur quand vous êtes connecté ; ici, ce sont des valeurs locales. Sans connexion, rien n'est envoyé. Les résultats en attente (« sagnac purge » les supprime) partent avant celui-ci, au même format.",
-  "check.payload_with_session": "--show-payload ne se combine pas avec --session : cette option ne contacte pas le serveur."
+  "check.payload_with_session": "--show-payload ne se combine pas avec --session : cette option ne contacte pas le serveur.",
+  "doctor.shared": "Rapport envoyé à Sagnac (version de sagnac, système, architecture et état de chaque point ci-dessus, sans identifiant du poste). Identifiant à donner au support : %s",
+  "doctor.share_dev_build": "Ce binaire ne peut pas envoyer de rapport : sa version, son système ou son architecture sortent de ce que la plateforme accepte. Rien n'est envoyé. Installez une version publiée de sagnac.",
+  "doctor.share_rate_limited": "La plateforme reçoit trop de rapports depuis cette adresse : le rapport n'est pas envoyé. Relancez « sagnac doctor --share » dans %s.",
+  "doctor.share_rate_limited_later": "La plateforme reçoit trop de rapports depuis cette adresse : le rapport n'est pas envoyé. Relancez « sagnac doctor --share » dans quelques minutes.",
+  "doctor.share_refused": "La plateforme a refusé le rapport : il n'est pas envoyé, et reste affiché ci-dessus. Signalez-le en joignant la sortie de « sagnac version ».",
+  "doctor.share_failed": "La plateforme n'a pas pu recevoir le rapport. Il reste affiché ci-dessus. Relancez « sagnac doctor --share » plus tard."
 }

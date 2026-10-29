@@ -1,14 +1,18 @@
 package oracle
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Schema is the identifier of the result format (docs/contrat.md, section 4).
@@ -89,12 +93,46 @@ func (r *Result) ExitCode() int { return r.Exit }
 
 // currentPlatform describes the machine: its real architecture, not the one
 // of this binary (an amd64 binary under Rosetta still reports arm64).
-func currentPlatform() Platform {
+//
+// For a lab docker: true it also names the container engine and its server
+// version, read by docker version (docs/contrat.md, section 4); both stay
+// null otherwise, or when the engine does not answer.
+func currentPlatform(docker bool) Platform {
 	arch := machineArch()
 	if arch == "" {
 		arch = runtime.GOARCH
 	}
-	return Platform{System: runtime.GOOS, Architecture: arch}
+	p := Platform{System: runtime.GOOS, Architecture: arch}
+	if docker {
+		p.ContainerEngine, p.EngineVersion = containerEngine()
+	}
+	return p
+}
+
+var reEngineVersion = regexp.MustCompile(`^[0-9][0-9A-Za-z.+~-]{0,31}$`)
+
+// engineDelay bounds docker version.
+const engineDelay = 10 * time.Second
+
+// containerEngine runs docker version with the environment of the command
+// and keeps bounded values only: docker or podman, and the server version.
+func containerEngine() (*string, *string) {
+	ctx, cancel := context.WithTimeout(context.Background(), engineDelay)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "docker", "version", "--format",
+		"{{.Server.Version}}|{{json .Server.Components}}").Output()
+	if err != nil {
+		return nil, nil
+	}
+	version, components, _ := strings.Cut(pyStrip(string(out)), "|")
+	if !reEngineVersion.MatchString(version) {
+		return nil, nil
+	}
+	engine := "docker"
+	if strings.Contains(strings.ToLower(components), "podman") {
+		engine = "podman"
+	}
+	return &engine, &version
 }
 
 // normalizeArch names an architecture like the reference executor does.

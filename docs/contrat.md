@@ -44,7 +44,8 @@ Clés du lab (liste fermée) : `id`, `version`, `title`, `type` (`guide`,
 `standalone`, `troubleshooting`), `difficulty`, `target_minutes`,
 `objectives`, `prerequisites`, `tools`, `genai`, `gpu`, `docker`,
 `network_during_check`, `max_memory_mb`, `certifiable`, `artifacts`,
-`preconditions` (chacune `code`, `description`), `checks`.
+`preconditions` (chacune `code`, `description`), `checks`, et `cluster`,
+facultative (section 7).
 
 Clés d'un contrôle (liste fermée) :
 
@@ -65,6 +66,10 @@ ces règles et tout `meta.yaml` du contrat v1 sont refusés en les nommant :
 `ORACLE_INVALID_KIT`, code de sortie 3. Un fichier à moitié lu n'est jamais
 exécuté.
 
+`checks/teardown.sh`, s'il existe, est un fichier exécutable (sinon kit
+invalide) : il défait ce que le passage a créé hors processus (images,
+conteneurs) et tourne après le dernier contrôle (section 3).
+
 ## 3. Appel de l'oracle
 
 Chaque `sagnac check` réévalue tous les contrôles, dans l'ordre, sans mémoire
@@ -77,7 +82,21 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
   session (groupe de processus), avec un environnement réduit : `PATH`,
   `HOME`, `TMPDIR`, `LC_ALL=C`, `XDG_CONFIG_HOME`, et `SAGNAC_LAB`,
   `SAGNAC_CHECK`, `SAGNAC_WORKSPACE`, `SAGNAC_SEED`, `SAGNAC_RESULT`,
-  `SAGNAC_LIB`. Tout ce qu'il a lancé est tué à sa fin.
+  `SAGNAC_LIB`, plus `SAGNAC_CLUSTER` pour un lab à cluster (section 7).
+  S'y ajoutent `DOCKER_HOST` s'il est posé et commence par `unix://` (moteur
+  choisi par l'élève), `KUBECACHEDIR` et `DOCKER_CONFIG` seulement s'ils sont
+  sous le `TMPDIR` de la commande, et, par `GIT_CONFIG_COUNT`,
+  `safe.directory=*`, `core.fsmonitor=false` et `core.hooksPath=/dev/null` :
+  Git lit les dépôts de l'espace quel que soit leur propriétaire, sans leurs
+  crochets. Tout ce qu'il a lancé est tué à sa fin.
+- **Ramassage.** Après le dernier contrôle, `checks/teardown.sh` (s'il
+  existe) défait ce que le passage a créé hors processus ; pour un lab à
+  cluster, `_cadre/lib/cluster-nettoyage.sh` vide aussi l'espace du cluster
+  avant le premier contrôle et après le dernier (section 7). Même
+  environnement (sans `SAGNAC_CHECK` ni `SAGNAC_RESULT`) et même coupure du
+  réseau que les contrôles, 120 s chacun, hors plafond et hors `duration_ms`,
+  même après un délai dépassé ou une interruption. Le ramassage de fin ne
+  change pas le verdict.
 - **Fin du script.** Il se termine par une seule des fonctions de
   `lib/controle.sh`, qui écrit dans `SAGNAC_RESULT` des lignes `code=`,
   `observed=`, `expected=` :
@@ -95,9 +114,11 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
   (`ORACLE_INVALID_OUTPUT`), code absent de `codes` ou de `preconditions`
   (`ORACLE_UNDECLARED_CODE`), contrôle tué par une interruption
   (`ORACLE_CHECK_INTERRUPTED`).
-- **Plafond.** 60 s par passage, 240 s pour un lab GenAI ; au-delà, les
-  contrôles restants rendent `ORACLE_TOTAL_TIMEOUT`. Le plafond ne compte que
-  les contrôles : il démarre après l'attente des services ci-dessous.
+- **Plafond.** 60 s par passage sans cluster ni GenAI, 240 s avec l'un des
+  deux, 360 s pour un lab à cluster avec GenAI (section 7) ; le délai d'un
+  contrôle reste borné par `timeout_s` (section 2). Au-delà, les contrôles
+  restants rendent `ORACLE_TOTAL_TIMEOUT`. Le plafond ne compte que les
+  contrôles : il démarre après l'attente des services ci-dessous.
 - **Attente des services.** Avant le plafond, et avant de demander la session
   au serveur, `check` attend que les services du lab répondent, 180 s au plus.
   Aujourd'hui, le seul service est le cluster que déclare la clé `cluster` de
@@ -119,9 +140,15 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
 - **Réseau.** Aucun appel sortant pendant `check`, sauf si le lab déclare
   `network_during_check: true` : la CLI ne coupe alors rien. Sinon, elle le
   coupe :
-  `sandbox-exec` sous macOS (localhost et sockets Unix permis), `unshare -rn`
-  sous Linux. Sans méthode disponible, elle l'écrit sur la sortie d'erreur puis
-  lance les contrôles sans coupure.
+  `sandbox-exec` sous macOS (localhost et sockets Unix permis), `unshare -rnm`
+  puis `unshare -Ur` sous Linux (le contrôle, root d'un espace de noms
+  utilisateur enfant, ne peut ni démonter ni remonter). Dans les deux cas, le
+  kubeconfig administrateur des clusters
+  (`~/.cache/sagnac/clusters/*/admin/`) est illisible, quel que soit le lab :
+  refus du profil sous macOS, `tmpfs` sous Linux, dont l'échec arrête le
+  contrôle (`ORACLE_CHECK_INTERRUPTED`), jamais de contrôle sans masque. Sans
+  méthode disponible, elle l'écrit sur la sortie d'erreur puis lance les
+  contrôles sans coupure.
 
 ## 4. Résultat `sagnac-result/2`
 
@@ -139,11 +166,16 @@ d'un passage à l'autre : aucun verdict n'est mis en cache.
 | `status` | `pass`, `fail` ou `error` |
 | `exit_code` | code de la section 5 |
 | `checks[]` | `id`, `step`, `status` (`pass`, `fail`, `error`, `skip`), `code` (pour `fail` et `error` seulement), `origin` (`student`, `platform`, `oracle`), `observed`, `expected`, `blocked_by`, `duration_ms`, dans l'ordre des étapes |
-| `platform` | `os`, `architecture`, `container_engine`, `engine_version` |
+| `platform` | `os`, `architecture`, `container_engine`, `engine_version` (ci-dessous) |
 
 Le JSON ne contient aucun texte localisé ni aucune chaîne libre lue sur le
 poste : seules les valeurs typées de `meta.yaml` sortent. Il est identique
 d'une langue à l'autre, horodatage et durées mis à part.
+
+`container_engine` et `engine_version`, pour un lab `docker: true` : `docker`
+ou `podman` et la version du serveur lue par `docker version` (32 caractères
+au plus, `[0-9][0-9A-Za-z.+~-]*`) ; `null` sinon, ou si le moteur ne répond
+pas. `duration_ms` ne compte pas le ramassage (section 3).
 
 `checks_sha256` : SHA-256 de la suite, pour `meta.yaml` puis chaque fichier de
 `checks/` dans l'ordre des chemins (parcours en profondeur, noms triés), de
@@ -216,6 +248,9 @@ script qui enchaîne `sagnac check` doit pouvoir s'y fier quel que soit l'état
 de la plateforme ; le 429 se lit dans le message. Les autres commandes rendent
 2 sur un 429, comme sur un 5xx : l'opération n'a pas eu lieu et ne dépend pas
 d'une action de l'élève.
+Seule exception : `KIT_DOWNLOAD_LIMIT` (429, plafond de kits différents sur
+24 heures) rend 1, car le compte doit attendre la sortie d'un kit de la
+fenêtre (`docs/api/erreurs.md` de la plateforme).
 
 ## 5 bis. `sagnac clean`
 
@@ -252,3 +287,73 @@ Le message d'un code est lu dans `<lab>/checks/messages/<langue>/<CODE>.txt`,
 puis dans `_cadre/messages/<langue>/` s'il existe, avec repli sur le français
 à chaque niveau. `{observed}` et `{expected}` y sont remplacés par les valeurs
 typées. Sans fichier, la CLI affiche le code.
+
+## 7. Labs à cluster
+
+Un lab déclare `cluster: <nom>` pour travailler sur un cluster Kubernetes
+local, partagé entre les labs d'un parcours (`sagnac-b1` pour B1-M2 à M6).
+`make setup` du kit le crée ou le démarre (`_cadre/bin/sagnac-cluster`) ;
+`sagnac check` ne le crée jamais.
+
+- **Kit.** `<nom>` (`[a-z0-9][a-z0-9-]{0,31}`) désigne
+  `_cadre/clusters/<nom>.conf`, lignes `CLE=valeur` (section 7 bis) dont
+  `API_PORT` (1 à 65535) donne le port de l'API sur `127.0.0.1`. Le lab
+  déclare aussi `docker: true`, dans `tools` au moins `k3d`, `kubectl`, `k3s`,
+  `k3s-airgap` et `k3d-tools`, et les préconditions `CLUSTER_DIRTY` et
+  `CLUSTER_BUSY` (avec leurs messages). Sinon : `ORACLE_INVALID_KIT`.
+- **Verrou.** Un seul `check` à la fois par cluster : la CLI prend sans
+  attendre `flock` sur `~/.cache/sagnac/clusters/<nom>/check.lock` (créé par
+  `make setup`). S'il est tenu, elle ne ramasse ni ne lance rien et chaque
+  contrôle rend `CLUSTER_BUSY` (`error`, `platform`, code 2). Sans ce
+  fichier (cluster jamais installé), le passage continue et les contrôles le
+  disent (`CLUSTER_MISSING`).
+- **Ramassage d'ouverture.** Si `cluster-nettoyage.sh` échoue ou dépasse son
+  délai avant le premier contrôle (objets restés d'un passage interrompu),
+  aucun contrôle n'est lancé : chacun rend `CLUSTER_DIRTY` (`error`,
+  `platform`, code 2).
+- **Coupure du réseau.** Les contrôles parlent au cluster par la seule API
+  Kubernetes (`sagnac_kubectl`, identité « contrôle »), jamais par le socket
+  du moteur de conteneurs. macOS : l'API est sur `127.0.0.1:<port>`, permis
+  par le profil, qui retire pour ce lab les sockets Unix. Linux : l'espace de
+  noms réseau du contrôle n'a pas le `127.0.0.1` de l'hôte ; la CLI ouvre
+  hors de cet espace un socket Unix dans un dossier privé (0700, sous
+  `TMPDIR`, ou `/tmp` si le chemin est trop long) relié au seul port de
+  l'API, et relance son propre binaire dans l'espace du contrôle
+  (`sagnac __cluster-relay`, commande cachée) qui écoute `127.0.0.1:<port>`,
+  renvoie vers ce socket (32 connexions simultanées au plus) et lance le
+  contrôle. Rien d'autre ne passe : ni Internet, ni un autre port de l'hôte,
+  ni le moteur (`/run` et `/var/run` recouverts d'un `tmpfs`). Le kubeconfig
+  reste valide tel quel. Le ramassage passe par la même enveloppe.
+- **Plafond.** Un passage d'un lab à cluster a 240 s, 360 s avec GenAI,
+  quel que soit le contrat du cluster : ses contrôles démarrent des charges
+  sur le cluster avant de juger quoi que ce soit. `timeout_s` de chacun
+  reste à 60 s au plus, 240 s avec GenAI (section 2).
+
+## 7 bis. Contrat du cluster (v2, v3)
+
+La version du contrat est portée par le cluster, jamais par `meta.yaml` :
+`_cadre/clusters/<nom>.conf` sans ligne `CONTRAT` est un cluster du contrat
+v2 (`sagnac-b1`), avec `CONTRAT=3` un cluster du contrat v3 (`sagnac-b3`,
+B3-M3 à M5).
+
+- **Lecture de la conf.** Lignes vides et lignes qui commencent par `#`
+  ignorées. Seules les clés `API_PORT` et `CONTRAT`, chacune une fois au
+  plus, valeur prise telle quelle (sans retrait d'espaces) ; `CONTRAT`
+  absent ou `3`. Toute autre ligne ou valeur (`CONTRAT=9`, clé d'un contrat
+  plus récent, clé en double, ligne indentée) refuse le kit :
+  `ORACLE_INVALID_KIT`, code 3, avant tout contrôle, sans session ni envoi.
+  Une CLI qui ne connaît pas le contrat d'un cluster ne juge jamais ses
+  labs ; la mettre à jour règle le refus.
+- **Contrat v3.** Le code de l'élève ne tourne plus sur le poste pendant
+  `check` : les contrôles le placent dans des pods des espaces élèves du
+  cluster, sous les seuls droits du RBAC de l'élève. Pour la CLI, rien ne
+  change dans l'appel des contrôles, le ramassage (`lib/cluster-nettoyage.sh`
+  reconnaît lui-même le v3), le verrou ni la coupure du réseau ; seul le
+  port de l'API diffère. Les contrôles d'un lab v3 utilisent `python3` du
+  poste (`lib/k8s_v3.py`, code du cadre) ; son absence est une précondition
+  du lab, pas une erreur de la CLI.
+- **Kit v3.** En plus des fichiers de la section 7, le kit porte
+  `_cadre/clusters/v3/` (politique d'audit, garde-fous, socle, gabarits),
+  que `_cadre/bin/sagnac-cluster` copie dans
+  `~/.cache/sagnac/clusters/<nom>/v3/` à la création du cluster. La CLI les
+  dépose tels quels et ne les lit pas.

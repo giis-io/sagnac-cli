@@ -168,3 +168,58 @@ func TestReadyRuleIsTheFrameworks(t *testing.T) {
 		t.Errorf("ready rule = %v every %v", oracle.ReadyTimeout, oracle.ReadyInterval)
 	}
 }
+
+// A lab of the cluster contract v3 waits for its cluster like a lab v2: the
+// wait reads the cluster of meta.yaml, whatever the version in its .conf,
+// and ends before the checks, hence before their ceiling of 240 s starts.
+func TestClusterV3IsWaitedFor(t *testing.T) {
+	c := newCheckRig(t, clusterV3Meta)
+	cadre := filepath.Join(filepath.Dir(c.labDir), "_cadre")
+	cache := filepath.Join(t.TempDir(), "sagnac")
+	t.Setenv("SAGNAC_CACHE", cache)
+	state := filepath.Join(cache, "clusters", "sagnac-b3")
+	probes := filepath.Join(state, "probes")
+	// The API answers /readyz from the third probe on.
+	kubectl := "#!/bin/sh\necho probe >> " + probes + "\n[ \"$(wc -l < " + probes + ")\" -ge 3 ]\n"
+	for name, f := range map[string]struct {
+		body string
+		mode os.FileMode
+	}{
+		filepath.Join(cadre, "clusters", "sagnac-b3.conf"):                       {"API_PORT=6560\nCONTRAT=3\n", 0o644},
+		filepath.Join(cadre, "lib", "cluster-nettoyage.sh"):                      {"#!/bin/sh\nexit 0\n", 0o755},
+		filepath.Join(c.labDir, "checks", "messages", "fr", "CLUSTER_DIRTY.txt"): {"Sale.\n", 0o644},
+		filepath.Join(c.labDir, "checks", "messages", "fr", "CLUSTER_BUSY.txt"):  {"Occupé.\n", 0o644},
+		filepath.Join(state, "kubeconfig"):                                       {"", 0o600},
+		filepath.Join(state, "kubectl"):                                          {kubectl, 0o755},
+	} {
+		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte(f.body), f.mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	oldT, oldI := readyTimeout, readyInterval
+	readyTimeout, readyInterval = 5*time.Second, 2*time.Millisecond
+	t.Cleanup(func() { readyTimeout, readyInterval = oldT, oldI })
+	var probesAtCheck string
+	var contract int
+	old := verify
+	t.Cleanup(func() { verify = old })
+	verify = func(ctx context.Context, lab *oracle.Lab, ws string, seed int64, noNetwork bool) (*oracle.Result, error) {
+		raw, _ := os.ReadFile(probes)
+		probesAtCheck, contract = string(raw), lab.ClusterContract
+		return old(ctx, lab, ws, seed, noNetwork)
+	}
+	c.pass(t)
+	code, _, stderr := c.run(t, "check")
+	if code != oracle.ExitPass {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if contract != 3 || strings.Count(probesAtCheck, "probe") != 3 {
+		t.Errorf("contract %d, probes before the checks %q; want 3 and three probes", contract, probesAtCheck)
+	}
+	if !strings.Contains(stderr, i18n.T("check.waiting", "sagnac-b3", wholeSeconds(readyTimeout))) {
+		t.Errorf("the wait for sagnac-b3 is not announced: %q", stderr)
+	}
+}
