@@ -92,30 +92,33 @@ on:
 permissions:
   contents: read
 jobs:
-  build:
-    if: ${{ startsWith(inputs.runner, '"'"'sagnac-release-'"'"') }}
-    runs-on:
-      group: giis-usine-lourd
-      labels: [giis-usine-lourd]
-    steps:
-      - run: echo build
-  publish:
+  release:
+    name: release
     if: ${{ startsWith(inputs.runner, '"'"'sagnac-release-'"'"') }}
     runs-on: ${{ inputs.runner }}
     environment: release
     permissions:
       contents: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: echo publish'
+      - env:
+          P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+        run: echo publish'
 rm -f "$wf/other.yaml"
 printf '%s\n' "$good" >"$wf/pr.yml"
 printf '%s\n' "$rel" >"$wf/release.yml"
-expect 0 "release.yml may write contents and request an OIDC token" "$here/verifier-workflows.sh" "$tmp/wf"
+expect 0 "release.yml may write, sign, attest and read the APPLE_* secrets" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | sed 's/contents: write/packages: write/' >"$wf/release.yml"
 expect 1 "release.yml: another write permission" "$here/verifier-workflows.sh" "$tmp/wf"
-for bad in "  pull_request:" "  push:" "  schedule:" "      - run: echo \${{ secrets.TOKEN }}"; do
+for bad in "  pull_request:" "  push:" "  schedule:" "  release:"; do
+	printf '%s\n' "$rel" | sed "s/^  workflow_dispatch:/$bad\\
+  workflow_dispatch:/" >"$wf/release.yml"
+	expect 1 "release.yml refused: trigger $bad" "$here/verifier-workflows.sh" "$tmp/wf"
+done
+for bad in "      - run: echo \${{ secrets.TOKEN }}" "      - run: echo \${{ secrets.GITHUB_TOKEN }}" \
+	"      - run: echo \${{ toJSON(secrets) }}" "      - run: echo \${{ secrets['APPLE_X'] }}"; do
 	printf '%s\n%s\n' "$rel" "$bad" >"$wf/release.yml"
 	expect 1 "release.yml refused: $bad" "$here/verifier-workflows.sh" "$tmp/wf"
 done
@@ -128,11 +131,17 @@ expect 1 "release.yml: no guard on the runner label" "$here/verifier-workflows.s
 printf '%s\n' "$rel" | grep -v 'workflow_dispatch:' >"$wf/release.yml"
 expect 1 "release.yml: not started by hand" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | sed 's/^permissions:/permissions:\n  id-token: write/' >"$wf/release.yml"
-expect 1 "release.yml: a global write with a job on the shared runners" "$here/verifier-workflows.sh" "$tmp/wf"
+expect 0 "release.yml: a global write with the one job on the disposable runner" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | grep -v 'environment: release' >"$wf/release.yml"
 expect 1 "release.yml: no protected environment" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | sed 's/    runs-on:/    runs-on: ubuntu-24.04\n    x:/' >"$wf/release.yml"
 expect 1 "release.yml: GitHub-hosted runner" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | sed 's/^  release:/  publish:/' >"$wf/release.yml"
+expect 1 "release.yml: the job is not named release" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | sed 's/^    name: release/    name: publication/' >"$wf/release.yml"
+expect 1 "release.yml: the job name is not release" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n  build:\n    runs-on:\n      group: giis-usine-lourd\n    steps:\n      - run: make\n' "$rel" >"$wf/release.yml"
+expect 1 "release.yml: a second job" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" >"$wf/release.yml"
 printf '%s\n' "$good" | sed 's/runs-on: \[self-hosted\]/runs-on: macos-14/' >"$wf/pr.yml"
 expect 1 "pr.yml: GitHub-hosted runner" "$here/verifier-workflows.sh" "$tmp/wf"
@@ -140,6 +149,8 @@ printf '%s\n  id-token: write\n' "$good" >"$wf/pr.yml"
 expect 1 "id-token stays forbidden in pr.yml" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n  contents: write\n' "$good" >"$wf/pr.yml"
 expect 1 "contents: write stays forbidden in pr.yml" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n        env: {P: "${{ secrets.APPLE_DEVELOPER_ID_P12 }}"}\n' "$good" >"$wf/pr.yml"
+expect 1 "the APPLE_* secrets stay forbidden in pr.yml" "$here/verifier-workflows.sh" "$tmp/wf"
 rm -f "$wf/release.yml" "$wf/pr.yml"
 
 # --- formule-homebrew.sh ------------------------------------------------------
@@ -169,6 +180,7 @@ expect 64 "formula refused: version with a v" "$f" v1.2.3 "$sums"
 expect 64 "formula refused: no checksums file" "$f" 1.2.3 "$tmp/none"
 expect 64 "formula refused: missing argument" "$f" 1.2.3
 expect 1 "formula refused: sums of another version" "$f" 9.9.9 "$sums"
+
 
 # --- install.sh, on the files of a release already on disk ----------------------
 i=$here/install.sh

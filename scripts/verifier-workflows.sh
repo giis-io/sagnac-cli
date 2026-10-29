@@ -7,10 +7,12 @@
 # One workflow is the exception, release.yml: it is started by hand
 # (workflow_dispatch with a "runner" input, the label of a disposable release
 # runner, see CONTRIBUTING.md) and by nothing else, and may hold the two
-# permissions a signed release needs, contents: write (publish the release) and
-# id-token: write (the OIDC token of the cosign signature), as job permissions,
-# in a job that waits for the protected environment "release" and runs on
-# ${{ inputs.runner }}; it still uses no secret and no unpinned action.
+# permissions a signed release needs, contents: write (publish the release),
+# id-token: write (the OIDC token of the cosign signature and of the
+# attestations) and attestations: write, as job permissions, in its one job,
+# named "release", that waits for the protected environment "release" and runs
+# on ${{ inputs.runner }}; its only secrets are the APPLE_* secrets of that
+# environment (notarization), and it uses no unpinned action.
 # In every workflow, a job that writes or asks for an OIDC token never runs on
 # the shared runners of the factory (giis-usine-lourd).
 # No workflow uses a GitHub-hosted runner (ubuntu-*, macos-*, windows-*): the
@@ -31,7 +33,7 @@ refuse() {
 trigger=pull_request''_target
 # Write permissions allowed in a workflow, as "scope:write"; none, except
 # in the release workflow (see above).
-release_writes="contents:write id-token:write"
+release_writes="contents:write id-token:write attestations:write"
 for f in "$dir"/*.yml "$dir"/*.yaml; do
 	[ -f "$f" ] || continue
 	name=${f#"$root"/}
@@ -51,7 +53,8 @@ for f in "$dir"/*.yml "$dir"/*.yaml; do
 			refuse "$name" "le job qui signe doit utiliser l'environnement protégé release"
 		fi
 		# Nothing but a manual run, with the label of the disposable runner.
-		if grep -En '^[[:space:]]*(push|pull_request|schedule|issue_comment|release|repository_dispatch):' "$f" >/dev/null; then
+		# (triggers are read before "jobs:", where the job named release lives)
+		if sed '/^jobs:/,$d' "$f" | grep -En '^[[:space:]]*(push|pull_request|schedule|issue_comment|release|repository_dispatch):' >/dev/null; then
 			refuse "$name" "seul un lancement manuel (workflow_dispatch) peut lancer une publication"
 		fi
 		if ! grep -Eq '^[[:space:]]*workflow_dispatch:' "$f" || ! grep -Eq '^[[:space:]]+runner:' "$f"; then
@@ -60,6 +63,12 @@ for f in "$dir"/*.yml "$dir"/*.yaml; do
 		if ! grep -Eq 'runs-on:[[:space:]]*\$\{\{[[:space:]]*inputs\.runner[[:space:]]*\}\}' "$f" ||
 			! grep -q "startsWith(inputs.runner, 'sagnac-release-')" "$f"; then
 			refuse "$name" "le job de publication tourne sur le runner jetable (inputs.runner, étiquette sagnac-release-)"
+		fi
+		# A disposable runner takes one job; runner-ephemere.sh follows the job named release.
+		jobs=$(awk '/^jobs:/ { j = 1; next } j && /^[^[:space:]#]/ { j = 0 } j && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { n++ } END { print n + 0 }' "$f")
+		if [ "$jobs" -ne 1 ] || ! grep -Eq '^  release:[[:space:]]*$' "$f" ||
+			grep -E '^    name:' "$f" | grep -Evq '^    name:[[:space:]]*"?release"?[[:space:]]*$'; then
+			refuse "$name" "un seul job, nommé release (runner jetable à un job, suivi par runner-ephemere.sh)"
 		fi
 	fi
 	if grep -n "$trigger" "$f" >/dev/null; then
@@ -104,7 +113,12 @@ for f in "$dir"/*.yml "$dir"/*.yaml; do
 	if [ "$release" -eq 0 ] && grep -n 'id-token' "$f" >/dev/null; then
 		refuse "$name" "id-token interdit hors du workflow de publication"
 	fi
-	if grep -n 'secrets\.' "$f" >/dev/null; then
+	if [ "$release" -eq 1 ]; then
+		if grep -o 'secrets\.[A-Za-z0-9_]*' "$f" | grep -Evq '^secrets\.APPLE_[A-Z0-9_]+$' ||
+			grep -Eq 'secrets(\[|\.\*|[[:space:]]*\)|[[:space:]]*\}\})' "$f"; then
+			refuse "$name" "seuls les secrets APPLE_* de l'environnement release (notarisation) sont permis"
+		fi
+	elif grep -n 'secrets\.' "$f" >/dev/null; then
 		refuse "$name" "aucun secret dans un workflow de PR"
 	fi
 	grep -n 'uses:' "$f" | while IFS= read -r line; do

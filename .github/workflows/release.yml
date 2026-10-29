@@ -1,24 +1,32 @@
 # Publication of a version, started BY THE FOUNDER from his own machine:
 #
-#   SAGNAC_DEPOT=giis-io/sagnac-cli infra/usine/bin/runner-ephemere.sh executer release release.yml vX.Y.Z
+#   SAGNAC_DEPOT=giis-io/sagnac-cli infra/usine/bin/runner-ephemere.sh executer release release.yml <tag>
 #
 # (script of the academy repository, CONTRIBUTING.md, "Publier une version").
 # It draws a unique label sagnac-release-<date>-<random>, starts the workflow on
 # the tag with -f runner=<label>, waits for the approval of the environment
 # "release", then creates a disposable machine registered for this one job and
-# destroys it afterwards. Same procedure as the platform release. Nothing else
-# starts this workflow (scripts/verifier-workflows.sh enforces it).
+# destroys it afterwards. Nothing else starts this workflow
+# (scripts/verifier-workflows.sh enforces it).
 #
-# Two jobs. "build" has no right beyond reading the code; it runs on the
-# shared runners of the factory (giis-usine-lourd) and produces the archives
-# and SHA256SUMS. "publish" is the only job that can write or ask for an OIDC
-# token, and it runs on the disposable release runner only, never on the shared
-# ones: it signs SHA256SUMS with cosign, keyless (the OIDC token of this run),
-# checks the signature it has just made, then creates the GitHub release. It
-# builds nothing: it only handles the files of "build".
+# Two kinds of tag:
+#   vMAJ.MIN.CORR        the version: a draft release is filled, then published.
+#   vMAJ.MIN.CORR-rc.N   a rehearsal: the same steps, but the release stays a
+#                        draft, visible to the maintainers only. Delete it by hand.
+# MAJ.MIN.CORR is always the VERSION file.
 #
-# GitHub-hosted runners are not used. No secret; the Homebrew formula is
-# produced as a release file and copied to the tap by hand.
+# One job, named "release" (runner-ephemere.sh follows the job by this name),
+# on the disposable release runner only: never on a GitHub-hosted runner, never
+# on the shared runners of the factory. The disposable runner takes one job and
+# is destroyed, so the build, the signature and the publication share it.
+#
+# What it publishes: the four archives (darwin and linux, arm64 and amd64),
+# install.sh, SHA256SUMS and its keyless cosign signature
+# (SHA256SUMS.sigstore.json). Build provenance attestations are added when the
+# repository is public (GitHub offers none for a private repository on our
+# plan). The macOS binaries are signed and notarized when the APPLE_* secrets
+# of the environment "release" exist; without them the release goes out
+# without notarization and the installation script remains the way to install.
 name: release
 
 on:
@@ -41,15 +49,16 @@ defaults:
     shell: bash
 
 jobs:
-  build:
-    name: archives et sommes de contrôle
+  release:
+    name: release
     if: ${{ startsWith(github.ref, 'refs/tags/v') && startsWith(inputs.runner, 'sagnac-release-') }}
-    runs-on:
-      group: giis-usine-lourd
-      labels: [giis-usine-lourd]
-    timeout-minutes: 15
+    environment: release
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 40
     permissions:
-      contents: read
+      contents: write # create the release
+      id-token: write # OIDC token of the keyless signature and of the attestations
+      attestations: write # build provenance, public repository only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,66 +67,117 @@ jobs:
         with:
           go-version: "1.26.10" # same as the toolchain line of go.mod
           cache: false
-      - name: the tag is the version of the repository
+
+      - name: kind of release
+        id: mode
         env:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          [ "${TAG#v}" = "$(tr -d '[:space:]' < VERSION)" ] || { echo "tag $TAG differs from the VERSION file" >&2; exit 1; }
-      - name: build, archive, checksum
+          version=$(tr -d '[:space:]' < VERSION)
+          case $TAG in
+          "v$version") draft=false ;;
+          "v$version"-rc.[0-9]*)
+            [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]] || { echo "rehearsal tag $TAG: expected v$version-rc.N" >&2; exit 1; }
+            draft=true ;;
+          *) echo "tag $TAG is neither v$version nor v$version-rc.N (VERSION file)" >&2; exit 1 ;;
+          esac
+          echo "draft=$draft" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "tag $TAG, draft only: $draft"
+
+      - name: build the four binaries
         env:
           TAG: ${{ github.ref_name }}
+          VERSION_NAME: ${{ steps.mode.outputs.version }}
         run: |
           set -euo pipefail
-          version=${TAG#v}
-          stamp=$(git log -1 --format=%ct)
           mkdir dist
           for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
             os=${target%/*}
             arch=${target#*/}
-            name=sagnac_${version}_${os}_${arch}
+            name=sagnac_${VERSION_NAME}_${os}_${arch}
             mkdir "dist/$name"
             GOOS=$os GOARCH=$arch make build VERSION="$TAG" BIN="dist/$name/sagnac"
             cp LICENSE NOTICE "dist/$name/"
-            # Same bytes for the same sources: sorted names, fixed dates and owner, gzip without a date.
-            tar --sort=name --mtime="@$stamp" --owner=0 --group=0 --numeric-owner \
-              -C "dist/$name" -cf - sagnac LICENSE NOTICE | gzip -n -9 > "dist/$name.tar.gz"
-            rm -r "dist/$name"
           done
-          (cd dist && sha256sum -- *.tar.gz > SHA256SUMS && cat SHA256SUMS)
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: dist
-          path: dist/
-          if-no-files-found: error
-          retention-days: 7
 
-  publish:
-    name: signature et publication
-    needs: build
-    if: ${{ startsWith(github.ref, 'refs/tags/v') && startsWith(inputs.runner, 'sagnac-release-') }}
-    environment: release
-    runs-on: ${{ inputs.runner }}
-    timeout-minutes: 10
-    permissions:
-      contents: write # create the release
-      id-token: write # OIDC token of the keyless signature
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: dist
-          path: dist
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-      - name: check the files of the build
+      - name: Apple secrets present?
+        id: apple
+        env:
+          P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
         run: |
           set -euo pipefail
+          if [ -n "$P12" ] && [ -n "$P12_PASSWORD" ] && [ -n "$NOTARY_KEY" ] && [ -n "$NOTARY_KEY_ID" ] && [ -n "$NOTARY_ISSUER_ID" ]; then
+            echo "notarize=true" >> "$GITHUB_OUTPUT"
+            echo "macOS binaries: signed and notarized"
+          else
+            echo "notarize=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::APPLE_* secrets absent from the environment release: macOS binaries are not notarized"
+          fi
+
+      - name: sign and notarize the macOS binaries
+        if: ${{ steps.apple.outputs.notarize == 'true' }}
+        env:
+          P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          VERSION_NAME: ${{ steps.mode.outputs.version }}
+          # rcodesign (apple-codesign) signs and notarizes from Linux.
+          RCODESIGN_URL: https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-x86_64-unknown-linux-musl.tar.gz
+          RCODESIGN_SHA256: dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002
+        run: |
+          set -euo pipefail
+          [ "$(uname -m)" = x86_64 ] || { echo "rcodesign is pinned for x86_64" >&2; exit 1; }
+          s=$(mktemp -d "$RUNNER_TEMP/apple.XXXXXX")
+          trap 'rm -rf "$s"' EXIT
+          curl -fsSL --proto '=https' -o "$s/rcodesign.tar.gz" "$RCODESIGN_URL"
+          echo "$RCODESIGN_SHA256  $s/rcodesign.tar.gz" | sha256sum --check --strict
+          tar -xzf "$s/rcodesign.tar.gz" -C "$s" --strip-components=1
+          rcodesign=$s/rcodesign
+          umask 077
+          printf '%s' "$P12" | base64 -d > "$s/id.p12"
+          printf '%s' "$P12_PASSWORD" > "$s/id.pw"
+          printf '%s\n' "$NOTARY_KEY" > "$s/notary.p8"
+          "$rcodesign" encode-app-store-connect-api-key -o "$s/notary.json" "$NOTARY_ISSUER_ID" "$NOTARY_KEY_ID" "$s/notary.p8"
+          mkdir "$s/zip"
+          for arch in arm64 amd64; do
+            bin=dist/sagnac_${VERSION_NAME}_darwin_${arch}/sagnac
+            "$rcodesign" sign --p12-file "$s/id.p12" --p12-password-file "$s/id.pw" \
+              --code-signature-flags runtime --binary-identifier fr.sagnac.cli "$bin"
+            "$rcodesign" verify "$bin"
+            mkdir "$s/zip/$arch"
+            cp "$bin" "$s/zip/$arch/sagnac"
+          done
+          # A bare binary cannot be stapled: Gatekeeper finds the ticket online.
+          (cd "$s/zip" && python3 -m zipfile -c "$s/sagnac-darwin.zip" arm64 amd64)
+          "$rcodesign" notary-submit --api-key-file "$s/notary.json" --wait --max-wait-seconds 1200 "$s/sagnac-darwin.zip"
+
+      - name: archive and checksum
+        run: |
+          set -euo pipefail
+          stamp=$(git log -1 --format=%ct)
           cd dist
+          for dir in sagnac_*/; do
+            name=${dir%/}
+            # Same bytes for the same binaries: sorted names, fixed dates and owner, gzip without a date.
+            tar --sort=name --mtime="@$stamp" --owner=0 --group=0 --numeric-owner \
+              -C "$name" -cf - sagnac LICENSE NOTICE | gzip -n -9 > "$name.tar.gz"
+            rm -r "$name"
+          done
+          cp ../scripts/install.sh install.sh
+          sha256sum -- *.tar.gz install.sh > SHA256SUMS
+          cat SHA256SUMS
           set -- *
-          [ "$#" -eq 5 ] || { echo "expected 4 archives and SHA256SUMS, found: $*" >&2; exit 1; }
-          sha256sum --check --strict SHA256SUMS
+          [ "$#" -eq 6 ] || { echo "expected 4 archives, install.sh and SHA256SUMS, found: $*" >&2; exit 1; }
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: sign SHA256SUMS (keyless)
         working-directory: dist
         run: cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
@@ -132,14 +192,58 @@ jobs:
             --certificate-identity "https://github.com/${WORKFLOW_REF}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             SHA256SUMS
-      - name: Homebrew formula
-        env:
-          TAG: ${{ github.ref_name }}
-        run: scripts/formule-homebrew.sh "${TAG#v}" dist/SHA256SUMS > dist/sagnac.rb
-      - name: create the release
+
+      - name: build provenance (public repository, published version)
+        if: ${{ github.event.repository.private == false && steps.mode.outputs.draft == 'false' }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/install.sh
+
+      - name: create the release (draft), upload the files
+        id: create
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          DRAFT: ${{ steps.mode.outputs.draft }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" --verify-tag --title "sagnac $TAG" --generate-notes dist/*
+          api() { # api METHOD URL [curl options...]: the token goes through the standard input of curl
+            m=$1 u=$2
+            shift 2
+            printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" |
+              curl -fsS -K - -X "$m" -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2022-11-28' "$@" "$u"
+          }
+          body=$(jq -n --arg tag "$TAG" --arg sha "$GITHUB_SHA" --argjson rc "$DRAFT" \
+            '{tag_name: $tag, target_commitish: $sha, name: ("sagnac " + $tag), draft: true,
+              prerelease: $rc, generate_release_notes: ($rc | not)}')
+          id=$(api POST "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases" --data "$body" | jq -er .id)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          upload=${GITHUB_API_URL/api./uploads.}
+          for f in dist/*; do
+            api POST "$upload/repos/$GITHUB_REPOSITORY/releases/$id/assets?name=$(basename "$f")" \
+              -H 'Content-Type: application/octet-stream' --data-binary "@$f" | jq -er .name
+          done
+          n=$(api GET "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/$id" | jq '.assets | length')
+          [ "$n" -eq 7 ] || { echo "the release holds $n files, expected 7" >&2; exit 1; }
+
+      - name: publish the release
+        if: ${{ steps.mode.outputs.draft == 'false' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ID: ${{ steps.create.outputs.id }}
+        run: |
+          set -euo pipefail
+          printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" |
+            curl -fsS -K - -X PATCH -H 'Accept: application/vnd.github+json' \
+              --data '{"draft": false, "make_latest": "true"}' \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/$ID" | jq -r .html_url
+
+      - name: rehearsal summary
+        if: ${{ steps.mode.outputs.draft == 'true' }}
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          echo "Draft release $TAG filled and left unpublished (maintainers only)." >> "$GITHUB_STEP_SUMMARY"

@@ -52,15 +52,21 @@ approuve le lancement des workflows avant qu'ils tournent.
 
 ## Publier une version
 
-Réservé aux mainteneurs. Une version naît d'une étiquette `vMAJ.MIN.CORR` posée
-sur `main` ; le fichier `VERSION` doit déjà porter le même numéro.
+Réservé aux mainteneurs. Une version naît d'une étiquette posée sur `main` ;
+le fichier `VERSION` doit déjà porter le même numéro `MAJ.MIN.CORR`.
+
+- `vMAJ.MIN.CORR` : la version. La page est remplie en brouillon puis publiée.
+- `vMAJ.MIN.CORR-rc.N` : une répétition. Mêmes étapes, mais la page reste un
+  brouillon visible des seuls mainteneurs (pré-version) ; on la supprime à la
+  main après contrôle.
 
 1. Fusionner la demande de fusion qui met `VERSION` à jour.
-2. Poser et pousser l'étiquette : `git tag v0.1.0 && git push origin v0.1.0`.
-3. Depuis le poste du fondateur, dans un clone du dépôt académie (même
-   procédure que la release de la plateforme), avec un jeton GitHub à grain fin
-   limité à `giis-io/sagnac-cli` (« Administration » et « Actions » en
-   écriture), créé juste avant et révoqué juste après :
+2. Poser et pousser l'étiquette : `git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1`
+   (répétition) ou `git tag v0.1.0 && git push origin v0.1.0`.
+3. Depuis le poste du fondateur, dans un clone du dépôt académie, avec le jeton
+   Hetzner du projet `sagnac-usine` et un jeton GitHub à grain fin limité à
+   `giis-io/sagnac-cli` (« Administration » et « Actions » en écriture), créé
+   juste avant et révoqué juste après :
 
    ```
    SAGNAC_DEPOT=giis-io/sagnac-cli infra/usine/bin/runner-ephemere.sh executer release release.yml v0.1.0
@@ -68,27 +74,45 @@ sur `main` ; le fichier `VERSION` doit déjà porter le même numéro.
 
    Le script tire une étiquette unique `sagnac-release-<date>-<aléa>`, lance
    `.github/workflows/release.yml` sur l'étiquette avec `-f runner=<étiquette>`,
-   attend l'approbation de l'environnement `release` (à approuver sur GitHub),
-   crée alors une machine jetable enregistrée pour ce seul job, puis la détruit.
-4. Le job `build`, en lecture seule, tourne sur le groupe `giis-usine-lourd` et
-   produit les archives (`sagnac_<version>_<système>_<architecture>.tar.gz` pour
-   `darwin` et `linux`, `arm64` et `amd64`) et `SHA256SUMS`. Le job `publish`,
-   sur la machine jetable seulement, signe `SHA256SUMS` avec cosign sans clé
-   (`SHA256SUMS.sigstore.json`), vérifie la signature qu'il vient de faire, puis
-   crée la page de la version avec ces fichiers et la formule `sagnac.rb`.
-5. Copier `sagnac.rb` dans `Formula/sagnac.rb` du dépôt `giis-io/homebrew-tap`,
-   puis `brew audit --strict --online giis-io/tap/sagnac`.
+   attend l'approbation de l'environnement `release` (onglet Actions du dépôt,
+   « Review deployments »), crée alors une machine jetable enregistrée pour ce
+   seul job, puis la détruit.
+4. Le job unique `release`, sur la machine jetable seulement, construit les
+   quatre binaires (`darwin` et `linux`, `arm64` et `amd64`), les signe et les
+   fait notariser pour macOS si les secrets `APPLE_*` existent, produit les
+   archives `sagnac_<version>_<système>_<architecture>.tar.gz`, `install.sh` et
+   `SHA256SUMS`, signe `SHA256SUMS` avec cosign sans clé
+   (`SHA256SUMS.sigstore.json`) et vérifie cette signature. Si le dépôt est
+   public, il ajoute une attestation de provenance pour chaque archive et pour
+   `install.sh`. Il crée la page en brouillon, y dépose les 7 fichiers, puis la
+   publie (version) ou la laisse en brouillon (répétition).
 
-Prérequis : l'environnement `release` existe sur `giis-io/sagnac-cli` (reviewer
-requis, étiquettes `v*` seulement) et la machine jetable dispose de `gh` et de
-`curl`.
+Pour essayer `install.sh` sur une répétition (brouillon, dépôt privé), on
+télécharge ses fichiers avec un compte de l'organisation puis on installe
+depuis ce dossier :
 
-Le workflow n'utilise aucun secret. Seul `release.yml` peut écrire dans le dépôt
-et demander un jeton OIDC, et seulement sur le runner jetable :
-`scripts/verifier-workflows.sh` refuse ces droits ailleurs, refuse à tout job
-qui les demande de tourner sur `giis-usine-lourd`, et refuse à `release.yml`
-tout autre déclencheur que le lancement manuel. Pour vérifier une version à la
-main, voir « Installer » dans `README.md`.
+```
+gh release download v0.1.0-rc.1 -R giis-io/sagnac-cli -D rc1
+SAGNAC_RELEASE_DIR=rc1 SAGNAC_VERSION=0.1.0-rc.1 sh rc1/install.sh
+```
+
+Prérequis sur `giis-io/sagnac-cli` :
+
+- l'environnement `release`, avec un reviewer requis et les étiquettes `v*`
+  pour seule règle de déploiement ;
+- pour la notarisation (facultative ; sans elle la version sort sans) : les
+  secrets d'environnement `APPLE_DEVELOPER_ID_P12` (certificat « Developer ID
+  Application » de GIIS, `.p12` en base64), `APPLE_DEVELOPER_ID_P12_PASSWORD`,
+  `APPLE_NOTARY_KEY` (clé d'API App Store Connect, contenu du `.p8`),
+  `APPLE_NOTARY_KEY_ID` et `APPLE_NOTARY_ISSUER_ID`.
+
+Seul `release.yml` peut écrire dans le dépôt, demander un jeton OIDC et lire
+des secrets (les seuls `APPLE_*`), et seulement sur le runner jetable :
+`scripts/verifier-workflows.sh` refuse ces droits ailleurs, refuse tout runner
+hébergé par GitHub et le groupe partagé `giis-usine-lourd` pour un job qui
+écrit, et refuse à `release.yml` tout autre déclencheur que le lancement
+manuel et tout autre job que `release`. Pour vérifier une version à la main,
+voir « Installer » dans `README.md`.
 
 ## Certificat d'origine (DCO)
 
