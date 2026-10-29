@@ -31,7 +31,7 @@ func TestReadmeCommandsNeverPipeToAShell(t *testing.T) {
 func TestReadmeGivesTheVerification(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, want := range []string{
-		"brew install giis-io/tap/sagnac", "cosign verify-blob", "SHA256SUMS.sigstore.json",
+		"releases/latest/download/install.sh && sh install.sh", "cosign verify-blob", "SHA256SUMS.sigstore.json",
 		"--certificate-oidc-issuer https://token.actions.githubusercontent.com", "sha256sum -c -",
 		".github/workflows/release.yml@refs/tags/v$VERSION",
 	} {

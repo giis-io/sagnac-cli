@@ -170,4 +170,41 @@ expect 64 "formula refused: no checksums file" "$f" 1.2.3 "$tmp/none"
 expect 64 "formula refused: missing argument" "$f" 1.2.3
 expect 1 "formula refused: sums of another version" "$f" 9.9.9 "$sums"
 
+# --- install.sh, on the files of a release already on disk ----------------------
+i=$here/install.sh
+rd=$tmp/release
+mkdir -p "$rd" "$tmp/stage" "$tmp/nocosign" "$tmp/badcosign"
+printf '#!/bin/sh\necho "sagnac v1.2.3"\n' >"$tmp/stage/sagnac"
+chmod 0755 "$tmp/stage/sagnac"
+for p in darwin_arm64 darwin_amd64 linux_arm64 linux_amd64; do
+	tar -C "$tmp/stage" -czf "$rd/sagnac_1.2.3_$p.tar.gz" sagnac
+done
+(cd "$rd" && for x in *.tar.gz; do
+	if command -v sha256sum >/dev/null 2>&1; then sha256sum -- "$x"; else shasum -a 256 -- "$x"; fi
+done >SHA256SUMS)
+echo '{}' >"$rd/SHA256SUMS.sigstore.json"
+printf '#!/bin/sh\nexit 1\n' >"$tmp/badcosign/cosign"
+chmod 0755 "$tmp/badcosign/cosign"
+safe_path=$tmp/nocosign:/usr/bin:/bin:/usr/sbin:/sbin
+inst() { # inst PATH DEST [VERSION]
+	env PATH="$1" HOME="$tmp/home" SAGNAC_RELEASE_DIR="$rd" SAGNAC_INSTALL_DIR="$2" SAGNAC_VERSION="${3-1.2.3}" sh "$i"
+}
+expect 0 "install.sh installs from a release directory" inst "$safe_path" "$tmp/bin1"
+[ -x "$tmp/bin1/sagnac" ] || { echo "FAIL install.sh: no executable sagnac"; failed=1; }
+grep -q 'somme SHA-256 vérifiée' "$tmp/out" || { echo "FAIL install.sh: checksum not reported"; failed=1; }
+expect 0 "install.sh accepts a version with a v" inst "$safe_path" "$tmp/bin2" v1.2.3
+expect 1 "install.sh refused: a signature that does not verify" inst "$tmp/badcosign:$safe_path" "$tmp/bin3"
+[ ! -e "$tmp/bin3/sagnac" ] || { echo "FAIL install.sh installed after a bad signature"; failed=1; }
+expect 1 "install.sh refused: a release directory without a version" inst "$safe_path" "$tmp/bin4" ""
+cp "$rd/SHA256SUMS" "$tmp/sums.keep"
+sed 's/^[0-9a-f]\{8\}/00000000/' "$tmp/sums.keep" >"$rd/SHA256SUMS"
+expect 1 "install.sh refused: a wrong checksum" inst "$safe_path" "$tmp/bin5"
+[ ! -e "$tmp/bin5/sagnac" ] || { echo "FAIL install.sh installed with a wrong checksum"; failed=1; }
+: >"$rd/SHA256SUMS"
+expect 1 "install.sh refused: the archive missing from SHA256SUMS" inst "$safe_path" "$tmp/bin6"
+cp "$tmp/sums.keep" "$rd/SHA256SUMS"
+expect 1 "install.sh refused: a version without its files" inst "$safe_path" "$tmp/bin7" 9.9.9
+expect 1 "install.sh refused: an invalid version" inst "$safe_path" "$tmp/bin8" 'x;y'
+if grep -n 'sudo' "$i" | grep -v '^[0-9]*:#' >/dev/null; then echo "FAIL install.sh mentions sudo outside a comment"; failed=1; fi
+
 exit $failed

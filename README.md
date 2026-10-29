@@ -19,15 +19,24 @@ d'installation de `sagnac` ne passe par `curl ... | sudo bash`, et vous ne
 devez en accepter aucune qui le demande : un programme installé avec `sudo`
 sans avoir été lu ni vérifié a tous les droits sur votre machine.
 
-### Homebrew (macOS et Linux)
+### En une ligne (macOS et Linux)
 
 ```
-brew install giis-io/tap/sagnac
+curl -fsSLO https://github.com/giis-io/sagnac-cli/releases/latest/download/install.sh && sh install.sh
 ```
 
-Homebrew télécharge l'archive de votre plateforme et refuse de l'installer si
-sa somme SHA-256 n'est pas celle de la formule. Aucun droit administrateur
-n'est nécessaire. La formule est dans `packaging/homebrew/sagnac.rb.in`.
+La commande télécharge le script `install.sh` puis le lance : vous pouvez le
+lire avant (`less install.sh`). Il choisit l'archive de votre machine (`darwin`
+ou `linux`, `arm64` ou `amd64`), vérifie sa somme SHA-256 dans `SHA256SUMS`,
+vérifie la signature de `SHA256SUMS` si [cosign](https://docs.sigstore.dev/cosign/installation/)
+est installé, puis copie `sagnac` dans `~/.local/bin`, sans `sudo`. Il
+n'installe rien si une vérification échoue.
+
+- Une version précise : `SAGNAC_VERSION=0.1.0 sh install.sh`.
+- Un autre dossier : `SAGNAC_INSTALL_DIR=$HOME/bin sh install.sh`.
+
+`install.sh` figure lui aussi dans `SHA256SUMS`. Une installation par Homebrew
+viendra avec une version suivante.
 
 ### Téléchargement vérifié
 
