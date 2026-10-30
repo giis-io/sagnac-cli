@@ -24,12 +24,16 @@ func resumeAt(e *api.APIError, now time.Time) time.Time {
 // resumeText writes at in the local time zone, rounded up to the minute (a
 // time shown must not come before the real one): the hour alone on the day
 // of now, the date and the hour otherwise.
+// localZone is the zone resumeText writes in; tests replace it rather than
+// time.Local, which other goroutines read.
+var localZone = time.Local
+
 func resumeText(at, now time.Time) string {
-	local := at.In(time.Local)
+	local := at.In(localZone)
 	if r := local.Truncate(time.Minute); !r.Equal(local) {
 		local = r.Add(time.Minute)
 	}
-	today := now.In(time.Local)
+	today := now.In(localZone)
 	if local.Year() == today.Year() && local.YearDay() == today.YearDay() {
 		return i18n.T("resume.today", local.Format("15:04"))
 	}

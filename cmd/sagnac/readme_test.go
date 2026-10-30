@@ -31,7 +31,7 @@ func TestReadmeCommandsNeverPipeToAShell(t *testing.T) {
 func TestReadmeGivesTheVerification(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, want := range []string{
-		"brew install giis-io/tap/sagnac", "cosign verify-blob", "SHA256SUMS.sigstore.json",
+		"releases/latest/download/install.sh && sh install.sh", "cosign verify-blob", "SHA256SUMS.sigstore.json",
 		"--certificate-oidc-issuer https://token.actions.githubusercontent.com", "sha256sum -c -",
 		".github/workflows/release.yml@refs/tags/v$VERSION",
 	} {
@@ -46,7 +46,7 @@ func TestReadmeGivesTheVerification(t *testing.T) {
 func TestReleaseWorkflowMatchesTheInstructions(t *testing.T) {
 	workflow := readRepoFile(t, ".github/workflows/release.yml")
 	formula := readRepoFile(t, "packaging/homebrew/sagnac.rb.in")
-	if !strings.Contains(workflow, "name=sagnac_${version}_${os}_${arch}") ||
+	if !strings.Contains(workflow, "name=sagnac_${VERSION_NAME}_${os}_${arch}") ||
 		!strings.Contains(workflow, "darwin/arm64 darwin/amd64 linux/arm64 linux/amd64") {
 		t.Error("release.yml no longer names its archives sagnac_<version>_<os>_<arch>")
 	}
@@ -55,7 +55,7 @@ func TestReleaseWorkflowMatchesTheInstructions(t *testing.T) {
 			t.Errorf("the formula does not download the %s archive", target)
 		}
 	}
-	for _, want := range []string{"cosign sign-blob", "SHA256SUMS.sigstore.json", "id-token: write"} {
+	for _, want := range []string{"cosign sign-blob", "SHA256SUMS.sigstore.json", "id-token: write", "cp ../scripts/install.sh install.sh"} {
 		if !strings.Contains(workflow, want) {
 			t.Errorf("release.yml lacks %q", want)
 		}

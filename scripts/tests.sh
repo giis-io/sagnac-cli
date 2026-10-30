@@ -92,30 +92,33 @@ on:
 permissions:
   contents: read
 jobs:
-  build:
-    if: ${{ startsWith(inputs.runner, '"'"'sagnac-release-'"'"') }}
-    runs-on:
-      group: giis-usine-lourd
-      labels: [giis-usine-lourd]
-    steps:
-      - run: echo build
-  publish:
+  release:
+    name: release
     if: ${{ startsWith(inputs.runner, '"'"'sagnac-release-'"'"') }}
     runs-on: ${{ inputs.runner }}
     environment: release
     permissions:
       contents: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: echo publish'
+      - env:
+          P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+        run: echo publish'
 rm -f "$wf/other.yaml"
 printf '%s\n' "$good" >"$wf/pr.yml"
 printf '%s\n' "$rel" >"$wf/release.yml"
-expect 0 "release.yml may write contents and request an OIDC token" "$here/verifier-workflows.sh" "$tmp/wf"
+expect 0 "release.yml may write, sign, attest and read the APPLE_* secrets" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | sed 's/contents: write/packages: write/' >"$wf/release.yml"
 expect 1 "release.yml: another write permission" "$here/verifier-workflows.sh" "$tmp/wf"
-for bad in "  pull_request:" "  push:" "  schedule:" "      - run: echo \${{ secrets.TOKEN }}"; do
+for bad in "  pull_request:" "  push:" "  schedule:" "  release:"; do
+	printf '%s\n' "$rel" | sed "s/^  workflow_dispatch:/$bad\\
+  workflow_dispatch:/" >"$wf/release.yml"
+	expect 1 "release.yml refused: trigger $bad" "$here/verifier-workflows.sh" "$tmp/wf"
+done
+for bad in "      - run: echo \${{ secrets.TOKEN }}" "      - run: echo \${{ secrets.GITHUB_TOKEN }}" \
+	"      - run: echo \${{ toJSON(secrets) }}" "      - run: echo \${{ secrets['APPLE_X'] }}"; do
 	printf '%s\n%s\n' "$rel" "$bad" >"$wf/release.yml"
 	expect 1 "release.yml refused: $bad" "$here/verifier-workflows.sh" "$tmp/wf"
 done
@@ -128,11 +131,17 @@ expect 1 "release.yml: no guard on the runner label" "$here/verifier-workflows.s
 printf '%s\n' "$rel" | grep -v 'workflow_dispatch:' >"$wf/release.yml"
 expect 1 "release.yml: not started by hand" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | sed 's/^permissions:/permissions:\n  id-token: write/' >"$wf/release.yml"
-expect 1 "release.yml: a global write with a job on the shared runners" "$here/verifier-workflows.sh" "$tmp/wf"
+expect 0 "release.yml: a global write with the one job on the disposable runner" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | grep -v 'environment: release' >"$wf/release.yml"
 expect 1 "release.yml: no protected environment" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" | sed 's/    runs-on:/    runs-on: ubuntu-24.04\n    x:/' >"$wf/release.yml"
 expect 1 "release.yml: GitHub-hosted runner" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | sed 's/^  release:/  publish:/' >"$wf/release.yml"
+expect 1 "release.yml: the job is not named release" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n' "$rel" | sed 's/^    name: release/    name: publication/' >"$wf/release.yml"
+expect 1 "release.yml: the job name is not release" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n  build:\n    runs-on:\n      group: giis-usine-lourd\n    steps:\n      - run: make\n' "$rel" >"$wf/release.yml"
+expect 1 "release.yml: a second job" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" >"$wf/release.yml"
 printf '%s\n' "$good" | sed 's/runs-on: \[self-hosted\]/runs-on: macos-14/' >"$wf/pr.yml"
 expect 1 "pr.yml: GitHub-hosted runner" "$here/verifier-workflows.sh" "$tmp/wf"
@@ -140,6 +149,8 @@ printf '%s\n  id-token: write\n' "$good" >"$wf/pr.yml"
 expect 1 "id-token stays forbidden in pr.yml" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n  contents: write\n' "$good" >"$wf/pr.yml"
 expect 1 "contents: write stays forbidden in pr.yml" "$here/verifier-workflows.sh" "$tmp/wf"
+printf '%s\n        env: {P: "${{ secrets.APPLE_DEVELOPER_ID_P12 }}"}\n' "$good" >"$wf/pr.yml"
+expect 1 "the APPLE_* secrets stay forbidden in pr.yml" "$here/verifier-workflows.sh" "$tmp/wf"
 rm -f "$wf/release.yml" "$wf/pr.yml"
 
 # --- formule-homebrew.sh ------------------------------------------------------
@@ -169,5 +180,47 @@ expect 64 "formula refused: version with a v" "$f" v1.2.3 "$sums"
 expect 64 "formula refused: no checksums file" "$f" 1.2.3 "$tmp/none"
 expect 64 "formula refused: missing argument" "$f" 1.2.3
 expect 1 "formula refused: sums of another version" "$f" 9.9.9 "$sums"
+
+
+# --- install.sh, on the files of a release already on disk ----------------------
+i=$here/install.sh
+rd=$tmp/release
+mkdir -p "$rd" "$tmp/stage" "$tmp/nocosign" "$tmp/badcosign"
+printf '#!/bin/sh\necho "sagnac v1.2.3"\n' >"$tmp/stage/sagnac"
+chmod 0755 "$tmp/stage/sagnac"
+for p in darwin_arm64 darwin_amd64 linux_arm64 linux_amd64; do
+	tar -C "$tmp/stage" -czf "$rd/sagnac_1.2.3_$p.tar.gz" sagnac
+done
+(cd "$rd" && for x in *.tar.gz; do
+	if command -v sha256sum >/dev/null 2>&1; then sha256sum -- "$x"; else shasum -a 256 -- "$x"; fi
+done >SHA256SUMS)
+echo '{}' >"$rd/SHA256SUMS.sigstore.json"
+printf '#!/bin/sh\nexit 1\n' >"$tmp/badcosign/cosign"
+chmod 0755 "$tmp/badcosign/cosign"
+safe_path=$tmp/nocosign:/usr/bin:/bin:/usr/sbin:/sbin
+inst() { # inst PATH DEST [VERSION]
+	env PATH="$1" HOME="$tmp/home" SAGNAC_RELEASE_DIR="$rd" SAGNAC_INSTALL_DIR="$2" SAGNAC_VERSION="${3-1.2.3}" sh "$i"
+}
+expect 0 "install.sh installs from a release directory" inst "$safe_path" "$tmp/bin1"
+[ -x "$tmp/bin1/sagnac" ] || { echo "FAIL install.sh: no executable sagnac"; failed=1; }
+grep -q 'somme SHA-256 vérifiée' "$tmp/out" || { echo "FAIL install.sh: checksum not reported"; failed=1; }
+expect 0 "install.sh accepts a version with a v" inst "$safe_path" "$tmp/bin2" v1.2.3
+expect 1 "install.sh refused: a signature that does not verify" inst "$tmp/badcosign:$safe_path" "$tmp/bin3"
+[ ! -e "$tmp/bin3/sagnac" ] || { echo "FAIL install.sh installed after a bad signature"; failed=1; }
+mv "$rd/SHA256SUMS.sigstore.json" "$tmp/sig.keep"
+expect 0 "install.sh installs a rehearsal without signature" inst "$tmp/badcosign:$safe_path" "$tmp/bin9"
+grep -q 'répétition sans signature' "$tmp/out" || { echo "FAIL install.sh: missing signature not reported"; failed=1; }
+mv "$tmp/sig.keep" "$rd/SHA256SUMS.sigstore.json"
+expect 1 "install.sh refused: a release directory without a version" inst "$safe_path" "$tmp/bin4" ""
+cp "$rd/SHA256SUMS" "$tmp/sums.keep"
+sed 's/^[0-9a-f]\{8\}/00000000/' "$tmp/sums.keep" >"$rd/SHA256SUMS"
+expect 1 "install.sh refused: a wrong checksum" inst "$safe_path" "$tmp/bin5"
+[ ! -e "$tmp/bin5/sagnac" ] || { echo "FAIL install.sh installed with a wrong checksum"; failed=1; }
+: >"$rd/SHA256SUMS"
+expect 1 "install.sh refused: the archive missing from SHA256SUMS" inst "$safe_path" "$tmp/bin6"
+cp "$tmp/sums.keep" "$rd/SHA256SUMS"
+expect 1 "install.sh refused: a version without its files" inst "$safe_path" "$tmp/bin7" 9.9.9
+expect 1 "install.sh refused: an invalid version" inst "$safe_path" "$tmp/bin8" 'x;y'
+if grep -n 'sudo' "$i" | grep -v '^[0-9]*:#' >/dev/null; then echo "FAIL install.sh mentions sudo outside a comment"; failed=1; fi
 
 exit $failed
