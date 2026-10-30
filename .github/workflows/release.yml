@@ -22,7 +22,8 @@
 #
 # What it publishes: the four archives (darwin and linux, arm64 and amd64),
 # install.sh, SHA256SUMS and its keyless cosign signature
-# (SHA256SUMS.sigstore.json). Build provenance attestations are added when the
+# (SHA256SUMS.sigstore.json), except for a rehearsal while the repository is
+# private (the signature would write its name to the public Rekor log). Build provenance attestations are added when the
 # repository is public (GitHub offers none for a private repository on our
 # plan). The macOS binaries are signed and notarized when the APPLE_* secrets
 # of the environment "release" exist; without them the release goes out
@@ -177,11 +178,16 @@ jobs:
           set -- *
           [ "$#" -eq 6 ] || { echo "expected 4 archives, install.sh and SHA256SUMS, found: $*" >&2; exit 1; }
 
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # A rehearsal of a private repository is not signed: a keyless signature writes the
+      # repository name and the tag to the public Rekor log.
+      - if: ${{ !(github.event.repository.private && steps.mode.outputs.draft == 'true') }}
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: sign SHA256SUMS (keyless)
+        if: ${{ !(github.event.repository.private && steps.mode.outputs.draft == 'true') }}
         working-directory: dist
         run: cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
       - name: verify the signature just made
+        if: ${{ !(github.event.repository.private && steps.mode.outputs.draft == 'true') }}
         working-directory: dist
         env:
           WORKFLOW_REF: ${{ github.workflow_ref }}

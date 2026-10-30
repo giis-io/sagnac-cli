@@ -95,6 +95,8 @@ main() {
 
 	for f in "$archive" SHA256SUMS SHA256SUMS.sigstore.json; do
 		if [ -n "${SAGNAC_RELEASE_DIR:-}" ]; then
+			# A rehearsal of the private repository has no signature (release.yml).
+			[ "$f" = SHA256SUMS.sigstore.json ] && [ ! -f "$SAGNAC_RELEASE_DIR/$f" ] && continue
 			[ -f "$SAGNAC_RELEASE_DIR/$f" ] || fail "fichier absent : $SAGNAC_RELEASE_DIR/$f"
 			cp "$SAGNAC_RELEASE_DIR/$f" "$work/$f"
 		else
@@ -102,7 +104,9 @@ main() {
 		fi
 	done
 
-	if command -v cosign >/dev/null 2>&1; then
+	if [ ! -f "$work/SHA256SUMS.sigstore.json" ]; then
+		say "répétition sans signature : seule la somme SHA-256 est vérifiée"
+	elif command -v cosign >/dev/null 2>&1; then
 		cosign verify-blob --bundle "$work/SHA256SUMS.sigstore.json" \
 			--certificate-identity "$identity_prefix$version" \
 			--certificate-oidc-issuer "$issuer" "$work/SHA256SUMS" >/dev/null 2>&1 ||

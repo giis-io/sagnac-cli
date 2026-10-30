@@ -207,6 +207,10 @@ grep -q 'somme SHA-256 vérifiée' "$tmp/out" || { echo "FAIL install.sh: checks
 expect 0 "install.sh accepts a version with a v" inst "$safe_path" "$tmp/bin2" v1.2.3
 expect 1 "install.sh refused: a signature that does not verify" inst "$tmp/badcosign:$safe_path" "$tmp/bin3"
 [ ! -e "$tmp/bin3/sagnac" ] || { echo "FAIL install.sh installed after a bad signature"; failed=1; }
+mv "$rd/SHA256SUMS.sigstore.json" "$tmp/sig.keep"
+expect 0 "install.sh installs a rehearsal without signature" inst "$tmp/badcosign:$safe_path" "$tmp/bin9"
+grep -q 'répétition sans signature' "$tmp/out" || { echo "FAIL install.sh: missing signature not reported"; failed=1; }
+mv "$tmp/sig.keep" "$rd/SHA256SUMS.sigstore.json"
 expect 1 "install.sh refused: a release directory without a version" inst "$safe_path" "$tmp/bin4" ""
 cp "$rd/SHA256SUMS" "$tmp/sums.keep"
 sed 's/^[0-9a-f]\{8\}/00000000/' "$tmp/sums.keep" >"$rd/SHA256SUMS"
