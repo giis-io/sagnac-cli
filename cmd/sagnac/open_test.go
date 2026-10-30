@@ -597,10 +597,10 @@ func TestInsufficientScopeMessageDependsOnMode(t *testing.T) {
 // withLocalZone runs the test in a fixed local zone and at a fixed instant.
 func withLocalZone(t *testing.T, now time.Time) {
 	t.Helper()
-	oldLocal, oldClock := time.Local, clock
-	time.Local = time.FixedZone("CEST", 2*3600)
+	oldLocal, oldClock := localZone, clock
+	localZone = time.FixedZone("CEST", 2*3600)
 	clock = func() time.Time { return now }
-	t.Cleanup(func() { time.Local, clock = oldLocal, oldClock })
+	t.Cleanup(func() { localZone, clock = oldLocal, oldClock })
 }
 
 // The reading rate of the instructions (3-4c1): the local time of resumption
