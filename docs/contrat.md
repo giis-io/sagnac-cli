@@ -28,6 +28,28 @@ L'énoncé, les indices et la solution ne sont jamais dans le kit. L'archive est
 un `tar.gz` déterministe ; la CLI n'accepte que des fichiers ordinaires et des
 dossiers sous `<lab>/` et `_cadre/` (règles détaillées dans `internal/kit`).
 
+**Signature.** Un kit exécute du code sur le poste (`make setup`, `checks/`,
+`clean`) : `sagnac pull` n'écrit rien tant que le kit n'est pas signé par une
+clé de GIIS figée dans le binaire (`internal/kit/keys.go`). La plateforme ne
+détient pas ces clés ; elle sert la signature produite hors de chez elle, dans
+deux en-têtes du téléchargement : `X-Sagnac-Kit-Key-Id` (16 caractères
+hexadécimaux, début du SHA-256 de la clé publique) et `X-Sagnac-Kit-Signature`
+(Ed25519, 64 octets en base64). Le message signé est, chaque ligne terminée par
+un saut de ligne :
+
+```
+sagnac-kit-signature-v1
+lab=<lab>
+version=<version>
+tar_sha256=<SHA-256 du tar décompressé, hexadécimal minuscule>
+```
+
+Un kit sans signature, signé par une autre clé, ou signé pour un autre lab,
+une autre version ou un autre contenu est refusé (`KIT_SIGNATURE_INVALID`,
+code de sortie 3). Le binaire fige deux clés : celle en service et une clé de
+secours gardée hors ligne. Une nouvelle clé n'est utilisée qu'une fois la
+version de la CLI qui la connaît devenue la version minimale acceptée.
+
 `lib/controle.sh` est cherché dans `<lab>/../_cadre` puis `<lab>/../../_cadre`
 (labs rangés par module). Introuvable : kit invalide.
 

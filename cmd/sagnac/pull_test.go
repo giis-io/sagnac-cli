@@ -4,7 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io/fs"
@@ -12,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +23,7 @@ import (
 	"github.com/giis-io/sagnac-cli/internal/account"
 	"github.com/giis-io/sagnac-cli/internal/api"
 	"github.com/giis-io/sagnac-cli/internal/i18n"
+	"github.com/giis-io/sagnac-cli/internal/kit"
 )
 
 type member struct {
@@ -62,6 +66,17 @@ func kitArchive(t *testing.T, lab, cadre string, extra ...member) []byte {
 	return buf.Bytes()
 }
 
+// signKit returns the headers X-Sagnac-Kit-Key-Id and X-Sagnac-Kit-Signature
+// of archive, signed by testKitKey for lab and version.
+func signKit(lab string, version int, archive []byte) (string, string) {
+	d, err := kit.TarDigest(bytes.NewReader(archive), 1<<30)
+	if err != nil {
+		panic(err)
+	}
+	sig := ed25519.Sign(testKitKey, kit.SignedMessage(lab, version, d))
+	return kit.KeyID(testKitKey.Public().(ed25519.PublicKey)), base64.StdEncoding.EncodeToString(sig)
+}
+
 func digest(b []byte) string {
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
@@ -84,6 +99,10 @@ type kitServer struct {
 	// this body and the Retry-After limitAfter ("": none).
 	limitBody  string
 	limitAfter string
+	// unsigned: the archive comes without a signature; signedFor: when not
+	// "", the signature is made for this lab instead of the requested one.
+	unsigned  bool
+	signedFor string
 }
 
 func (k *kitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -133,6 +152,16 @@ func (k *kitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("X-Sagnac-Kit-Sha256", pick(k.headerSum))
+	if !k.unsigned {
+		signed := parts[0]
+		if k.signedFor != "" {
+			signed = k.signedFor
+		}
+		version, _ := strconv.Atoi(parts[1])
+		id, sig := signKit(signed, version, archive)
+		w.Header().Set("X-Sagnac-Kit-Key-Id", id)
+		w.Header().Set("X-Sagnac-Kit-Signature", sig)
+	}
 	w.Write(archive)
 }
 
@@ -241,6 +270,23 @@ func TestPullGivenVersion(t *testing.T) {
 	}
 	if got := p.kits.requested(); got[len(got)-1] != "/v1/kits/hello/2" {
 		t.Errorf("requests = %v", got)
+	}
+}
+
+// A kit the platform serves without a signature by a pinned key, or with the
+// signature of another lab, never reaches the disk.
+func TestUnsignedKitRejected(t *testing.T) {
+	for name, setup := range map[string]func(p *pullRig){
+		"unsigned":  func(p *pullRig) { p.kits.unsigned = true },
+		"other lab": func(p *pullRig) { p.kits.signedFor = "other" },
+	} {
+		p := newPullRig(t)
+		setup(p)
+		code, _, stderr := p.run(t, "pull", "hello")
+		if code != exitInternal || !strings.Contains(stderr, "pas signé par GIIS") {
+			t.Errorf("%s: code %d, stderr %q", name, code, stderr)
+		}
+		p.nothingWritten(t)
 	}
 }
 
@@ -391,7 +437,8 @@ func TestPullSessionReleasedOnEveryPath(t *testing.T) {
 		"entitlement": func(p *pullRig) {
 			p.kits.status, p.kits.body = 403, `{"code": "ENTITLEMENT_INACTIVE", "state": "expired"}`
 		},
-		"checksum": func(p *pullRig) { p.kits.headerSum = strings.Repeat("0", 64) },
+		"checksum":  func(p *pullRig) { p.kits.headerSum = strings.Repeat("0", 64) },
+		"signature": func(p *pullRig) { p.kits.unsigned = true },
 		"unsafe": func(p *pullRig) {
 			p.kits.archives["hello"] = kitArchive(t, "hello", "", member{name: "../evil", typ: tar.TypeReg, mode: 0o644})
 		},

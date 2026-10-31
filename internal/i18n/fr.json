@@ -44,6 +44,7 @@
   "pull.done": "Kit du lab %s, version %d, installé dans %s.",
   "pull.next": "Pour préparer le lab, lancez « cd %s && make setup ».",
   "pull.checksum": "Le kit reçu ne correspond pas à son empreinte publiée. Rien n'a été écrit. Relancez la commande ; si l'erreur persiste, signalez-la en joignant la sortie de « sagnac version ».",
+  "pull.signature": "Le kit reçu n'est pas signé par GIIS pour ce lab et cette version : il est refusé et rien n'a été écrit. Signalez-le à %s en joignant la sortie de « sagnac version ».",
   "pull.unsafe_kit": "Le kit reçu est refusé : un chemin, un type de fichier ou une taille sort des règles d'extraction. Rien n'a été écrit. Signalez-le à %s en joignant la sortie de « sagnac version ».",
   "pull.write_failed": "Écriture impossible dans le dossier courant (droits ou disque plein). Rien n'a été installé. Lancez la commande dans un dossier où vous pouvez écrire.",
   "pull.entitlement_unpaid": "Le dernier paiement de votre abonnement n'a pas abouti : le kit n'est pas téléchargé. Régularisez le paiement depuis votre compte sur le site, puis relancez la commande.",

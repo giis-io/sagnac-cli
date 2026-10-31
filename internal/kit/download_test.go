@@ -125,7 +125,7 @@ func TestErrorCodesComeBackAsAPIError(t *testing.T) {
 }
 
 func TestDownloadVerifiesBothDigests(t *testing.T) {
-	archive := []byte("kit bytes")
+	archive := gzipped(t, []byte("kit bytes"))
 	good := sum(archive)
 	cases := []struct {
 		name     string
@@ -140,7 +140,8 @@ func TestDownloadVerifiesBothDigests(t *testing.T) {
 	}
 	for _, c := range cases {
 		s := newServer(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/gzip")
+			signedHeaders(t, w, archive)
+			w.Header().Del("X-Sagnac-Kit-Sha256")
 			if c.header != "" {
 				w.Header().Set("X-Sagnac-Kit-Sha256", c.header)
 			}
@@ -178,6 +179,8 @@ func TestDownloadSizeBounded(t *testing.T) {
 	s := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/gzip")
 		w.Header().Set("X-Sagnac-Kit-Sha256", sum(archive))
+		w.Header().Set(headerKeyID, "0000000000000000")
+		w.Header().Set(headerSignature, "x")
 		w.Write(archive)
 	})
 	work := t.TempDir()
