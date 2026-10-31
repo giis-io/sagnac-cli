@@ -55,7 +55,8 @@ func TestReleaseWorkflowMatchesTheInstructions(t *testing.T) {
 			t.Errorf("the formula does not download the %s archive", target)
 		}
 	}
-	for _, want := range []string{"cosign sign-blob", "SHA256SUMS.sigstore.json", "id-token: write", "cp ../scripts/install.sh install.sh"} {
+	for _, want := range []string{"cosign sign-blob", "SHA256SUMS.sigstore.json", "id-token: write", "cp ../scripts/install.sh install.sh",
+		"cyclonedx-gomod", "*.cdx.json install.sh > SHA256SUMS", "sbom-path:"} {
 		if !strings.Contains(workflow, want) {
 			t.Errorf("release.yml lacks %q", want)
 		}

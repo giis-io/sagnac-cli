@@ -14,7 +14,9 @@ Les commandes `submit` et `update` arrivent ensuite.
 
 Aucune version n'est encore publiée. À partir de la première, chaque version
 est publiée sur la page des versions du dépôt avec ses sommes de contrôle
-SHA-256 (`SHA256SUMS`) et une signature de ce fichier. Aucune méthode
+SHA-256 (`SHA256SUMS`), une signature de ce fichier et la nomenclature
+logicielle (SBOM CycloneDX) de chaque archive, `sagnac_<version>_<système>_<architecture>.cdx.json`,
+elle aussi listée dans `SHA256SUMS`. Aucune méthode
 d'installation de `sagnac` ne passe par `curl ... | sudo bash`, et vous ne
 devez en accepter aucune qui le demande : un programme installé avec `sudo`
 sans avoir été lu ni vérifié a tous les droits sur votre machine.

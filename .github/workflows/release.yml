@@ -21,11 +21,12 @@
 # is destroyed, so the build, the signature and the publication share it.
 #
 # What it publishes: the four archives (darwin and linux, arm64 and amd64),
+# one CycloneDX SBOM per archive (sagnac_<version>_<os>_<arch>.cdx.json),
 # install.sh, SHA256SUMS and its keyless cosign signature
 # (SHA256SUMS.sigstore.json), except for a rehearsal while the repository is
-# private (the signature would write its name to the public Rekor log). Build provenance attestations are added when the
-# repository is public (GitHub offers none for a private repository on our
-# plan). The macOS binaries are signed and notarized when the APPLE_* secrets
+# private (the signature would write its name to the public Rekor log). Build
+# provenance and SBOM attestations are added when the repository is public
+# (GitHub offers none for a private repository on our plan). The macOS binaries are signed and notarized when the APPLE_* secrets
 # of the environment "release" exist; without them the release goes out
 # without notarization and the installation script remains the way to install.
 name: release
@@ -103,6 +104,39 @@ jobs:
             cp LICENSE NOTICE "dist/$name/"
           done
 
+      # One SBOM per binary, with the build constraints of that binary (Makefile, build).
+      # The SBOM describes the source and the modules, not the bytes: it does not
+      # change when the macOS binaries are signed below.
+      - name: SBOM of each binary (CycloneDX)
+        env:
+          VERSION_NAME: ${{ steps.mode.outputs.version }}
+          CYCLONEDX_GOMOD_VERSION: 1.12.0
+          CYCLONEDX_GOMOD_SHA256_AMD64: 004b9f5cc595b797fb5423e2ae4c97bcf0f18c712ed2faee1640b09e5efd6d15
+          CYCLONEDX_GOMOD_SHA256_ARM64: b6dd6424755e61c0f7fcd36074fbb78798a33c52f1bd35dd177ba62eccadf404
+        run: |
+          set -euo pipefail
+          case $(uname -m) in
+          x86_64) arch=amd64 sum=$CYCLONEDX_GOMOD_SHA256_AMD64 ;;
+          aarch64) arch=arm64 sum=$CYCLONEDX_GOMOD_SHA256_ARM64 ;;
+          *) echo "no pinned cyclonedx-gomod for $(uname -m)" >&2; exit 1 ;;
+          esac
+          s=$(mktemp -d "$RUNNER_TEMP/cdx.XXXXXX")
+          trap 'rm -rf "$s"' EXIT
+          v=$CYCLONEDX_GOMOD_VERSION
+          curl -fsSL --proto '=https' -o "$s/cdx.tar.gz" \
+            "https://github.com/CycloneDX/cyclonedx-gomod/releases/download/v$v/cyclonedx-gomod_${v}_linux_${arch}.tar.gz"
+          echo "$sum  $s/cdx.tar.gz" | sha256sum --check --strict
+          tar -xzf "$s/cdx.tar.gz" -C "$s" cyclonedx-gomod
+          for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
+            os=${target%/*}
+            arch=${target#*/}
+            name=sagnac_${VERSION_NAME}_${os}_${arch}
+            GOOS=$os GOARCH=$arch CGO_ENABLED=0 GOFLAGS=-trimpath \
+              "$s/cyclonedx-gomod" app -json -std -licenses -output-version 1.7 \
+              -main cmd/sagnac -output "dist/$name.cdx.json" .
+            jq -e '.bomFormat == "CycloneDX" and (.metadata.component.name | length > 0)' "dist/$name.cdx.json" >/dev/null
+          done
+
       - name: Apple secrets present?
         id: apple
         env:
@@ -173,10 +207,10 @@ jobs:
             rm -r "$name"
           done
           cp ../scripts/install.sh install.sh
-          sha256sum -- *.tar.gz install.sh > SHA256SUMS
+          sha256sum -- *.tar.gz *.cdx.json install.sh > SHA256SUMS
           cat SHA256SUMS
           set -- *
-          [ "$#" -eq 6 ] || { echo "expected 4 archives, install.sh and SHA256SUMS, found: $*" >&2; exit 1; }
+          [ "$#" -eq 10 ] || { echo "expected 4 archives, 4 SBOMs, install.sh and SHA256SUMS, found: $*" >&2; exit 1; }
 
       # A rehearsal of a private repository is not signed: a keyless signature writes the
       # repository name and the tag to the public Rekor log.
@@ -207,6 +241,32 @@ jobs:
             dist/*.tar.gz
             dist/install.sh
 
+      # The SBOM of each archive, attested as such (public repository, published version).
+      - name: SBOM attestation, darwin arm64
+        if: ${{ github.event.repository.private == false && steps.mode.outputs.draft == 'false' }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/sagnac_${{ steps.mode.outputs.version }}_darwin_arm64.tar.gz
+          sbom-path: dist/sagnac_${{ steps.mode.outputs.version }}_darwin_arm64.cdx.json
+      - name: SBOM attestation, darwin amd64
+        if: ${{ github.event.repository.private == false && steps.mode.outputs.draft == 'false' }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/sagnac_${{ steps.mode.outputs.version }}_darwin_amd64.tar.gz
+          sbom-path: dist/sagnac_${{ steps.mode.outputs.version }}_darwin_amd64.cdx.json
+      - name: SBOM attestation, linux arm64
+        if: ${{ github.event.repository.private == false && steps.mode.outputs.draft == 'false' }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/sagnac_${{ steps.mode.outputs.version }}_linux_arm64.tar.gz
+          sbom-path: dist/sagnac_${{ steps.mode.outputs.version }}_linux_arm64.cdx.json
+      - name: SBOM attestation, linux amd64
+        if: ${{ github.event.repository.private == false && steps.mode.outputs.draft == 'false' }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/sagnac_${{ steps.mode.outputs.version }}_linux_amd64.tar.gz
+          sbom-path: dist/sagnac_${{ steps.mode.outputs.version }}_linux_amd64.cdx.json
+
       - name: create the release (draft), upload the files
         id: create
         env:
@@ -232,7 +292,7 @@ jobs:
             api POST "$upload/repos/$GITHUB_REPOSITORY/releases/$id/assets?name=$(basename "$f")" \
               -H 'Content-Type: application/octet-stream' --data-binary "@$f" | jq -er .name
           done
-          # 7 files when SHA256SUMS is signed, 6 for an unsigned rehearsal of a private repository.
+          # 11 files when SHA256SUMS is signed, 10 for an unsigned rehearsal of a private repository.
           set -- dist/*
           n=$(api GET "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/$id" | jq '.assets | length')
           [ "$n" -eq "$#" ] || { echo "the release holds $n files, expected $#" >&2; exit 1; }
