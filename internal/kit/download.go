@@ -157,6 +157,11 @@ func Download(ctx context.Context, c *account.Client, lab string, version int, d
 	if err != nil {
 		return nil, err
 	}
+	// Interrupted while the body arrived: the server may still end it cleanly,
+	// so a short body reads as complete. The interruption wins over the digest.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if n > MaxArchive {
 		return nil, &UnsafeError{Reason: reasonTooLarge}
 	}

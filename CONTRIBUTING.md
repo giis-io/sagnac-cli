@@ -80,11 +80,15 @@ le fichier `VERSION` doit déjà porter le même numéro `MAJ.MIN.CORR`.
 4. Le job unique `release`, sur la machine jetable seulement, construit les
    quatre binaires (`darwin` et `linux`, `arm64` et `amd64`), les signe et les
    fait notariser pour macOS si les secrets `APPLE_*` existent, produit les
-   archives `sagnac_<version>_<système>_<architecture>.tar.gz`, `install.sh` et
-   `SHA256SUMS`, signe `SHA256SUMS` avec cosign sans clé
+   archives `sagnac_<version>_<système>_<architecture>.tar.gz`, une SBOM
+   CycloneDX 1.7 par archive (`sagnac_<version>_<système>_<architecture>.cdx.json`,
+   `cyclonedx-gomod` épinglé par empreinte), `install.sh` et `SHA256SUMS`, qui
+   liste aussi les SBOM, signe `SHA256SUMS` avec cosign sans clé
    (`SHA256SUMS.sigstore.json`) et vérifie cette signature. Si le dépôt est
    public, il ajoute une attestation de provenance pour chaque archive et pour
-   `install.sh`. Il crée la page en brouillon, y dépose les 7 fichiers, puis la
+   `install.sh`, et une attestation de SBOM pour chaque archive. Il crée la page
+   en brouillon, y dépose les 11 fichiers (10 pour une répétition non signée
+   d'un dépôt privé), en vérifie le nombre contre celui de `dist/`, puis la
    publie (version) ou la laisse en brouillon (répétition).
 
 Pour essayer `install.sh` sur une répétition (brouillon, dépôt privé), on
