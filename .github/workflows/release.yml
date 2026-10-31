@@ -232,8 +232,10 @@ jobs:
             api POST "$upload/repos/$GITHUB_REPOSITORY/releases/$id/assets?name=$(basename "$f")" \
               -H 'Content-Type: application/octet-stream' --data-binary "@$f" | jq -er .name
           done
+          # 7 files when SHA256SUMS is signed, 6 for an unsigned rehearsal of a private repository.
+          set -- dist/*
           n=$(api GET "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/$id" | jq '.assets | length')
-          [ "$n" -eq 7 ] || { echo "the release holds $n files, expected 7" >&2; exit 1; }
+          [ "$n" -eq "$#" ] || { echo "the release holds $n files, expected $#" >&2; exit 1; }
 
       - name: publish the release
         if: ${{ steps.mode.outputs.draft == 'false' }}
