@@ -87,6 +87,12 @@ jobs:
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
           echo "tag $TAG, draft only: $draft"
 
+      # Without a pinned kit signing key, the binaries would refuse every kit.
+      - name: kit signing keys pinned
+        env:
+          SAGNAC_RELEASE_KEYS: "1"
+        run: go test ./internal/kit -run '^TestPinnedKeys$' -count=1
+
       - name: build the four binaries
         env:
           TAG: ${{ github.ref_name }}

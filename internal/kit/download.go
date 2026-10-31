@@ -1,5 +1,5 @@
 // Package kit downloads the kit of a lab (GET /v1/kits/…), checks its SHA-256
-// and extracts it into the working directory without ever writing outside
+// and its signature by a key pinned in the binary (signature.go), and extracts it into the working directory without ever writing outside
 // <lab>/ and _cadre/ (docs/contrat.md, section 1).
 // The token goes in the Authorization header only, through the client of the
 // account package, which follows no redirect.
@@ -108,7 +108,9 @@ func Current(ctx context.Context, c *account.Client, lab string) (*Info, error) 
 // again by name between the check and the extraction. The SHA-256 of the bytes received must equal the header
 // X-Sagnac-Kit-Sha256 and every non-empty value of expected (kit_sha256 of
 // the current version); otherwise the file is removed and ErrChecksum
-// returned. The caller ends with Discard.
+// returned. The kit must then carry a signature of lab, version and its
+// content by a pinned key (signature.go); otherwise the file is removed and
+// ErrSignature returned. The caller ends with Discard.
 func Download(ctx context.Context, c *account.Client, lab string, version int, dir string, expected ...string) (*os.File, error) {
 	if !ValidLab(lab) {
 		return nil, ErrInvalidLab
@@ -137,6 +139,10 @@ func Download(ctx context.Context, c *account.Client, lab string, version int, d
 	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/gzip") {
 		return nil, api.ErrBadResponse
 	}
+	keyID, signature := resp.Header.Get(headerKeyID), resp.Header.Get(headerSignature)
+	if keyID == "" || signature == "" {
+		return nil, ErrSignature
+	}
 	tmp, err := os.CreateTemp(dir, ".sagnac-kit-*.tar.gz")
 	if err != nil {
 		return nil, writeFailed(err)
@@ -162,6 +168,17 @@ func Download(ctx context.Context, c *account.Client, lab string, version int, d
 	}
 	if hex.EncodeToString(h.Sum(nil)) != announced {
 		return nil, ErrChecksum
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return nil, writeFailed(err)
+	}
+	tarSum, err := TarDigest(tmp, maxTar())
+	var unsafeErr *UnsafeError
+	if errors.As(err, &unsafeErr) {
+		return nil, err
+	}
+	if err != nil || verifySignature(lab, version, tarSum, keyID, signature) != nil {
+		return nil, ErrSignature
 	}
 	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
 		return nil, writeFailed(err)

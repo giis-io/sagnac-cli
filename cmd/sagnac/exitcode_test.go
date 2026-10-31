@@ -62,6 +62,7 @@ func TestExitCodeTable(t *testing.T) {
 		{"no config dir", account.ErrNoConfigDir, 3},
 		{"write", kit.ErrWrite, 3},
 		{"checksum", kit.ErrChecksum, 3},
+		{"signature", kit.ErrSignature, 3},
 		{"unsafe kit", kit.ErrUnsafe, 3},
 		{"bad response", api.ErrBadResponse, 3},
 		{"foreign address", api.ErrForeignAddress, 3},

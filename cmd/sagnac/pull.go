@@ -174,6 +174,8 @@ func reportPullError(w io.Writer, err error, lab, apiURL string, session bool) i
 		fmt.Fprintln(w, i18n.T("pull.framework_differs", lab))
 	case errors.Is(err, kit.ErrChecksum):
 		fmt.Fprintln(w, i18n.T("pull.checksum"))
+	case errors.Is(err, kit.ErrSignature):
+		fmt.Fprintln(w, i18n.T("pull.signature", securityContactAddr))
 	case errors.Is(err, kit.ErrUnsafe):
 		fmt.Fprintln(w, i18n.T("pull.unsafe_kit", securityContactAddr))
 	case errors.As(err, &apiErr):
