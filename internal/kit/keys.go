@@ -15,8 +15,8 @@ import (
 // platform; a key is removed the same way. The second key is the emergency
 // key, kept offline and unused while the first one is safe.
 var pinnedKeys = pinned(
-// sagnac-kits-1
-// sagnac-kits-2 (emergency)
+	"8bzXYyOMirE/hXDu+NNOLJo050SKYaQUbocAVA2rVVM=", // sagnac-kits-1
+	"UxlHmxfRbzvPN2EG4fi6oOo6t1muvidUvWKTl0Te444=", // sagnac-kits-2 (emergency)
 )
 
 // pinned decodes the pinned keys; a malformed key is a programming error.
