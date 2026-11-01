@@ -39,6 +39,10 @@ compte, comme dans git.
 `TestCrossCheck` rejoue en plus l'exécuteur de référence lui-même, sur les
 labs que désignent `SAGNAC_XCHECK_REFERENCE` et `SAGNAC_XCHECK_LABS` ; il ne
 tourne que dans la CI de la plateforme et il est sauté ailleurs.
+`TestCrossCheckLoad` se contente de lire chaque lab de `SAGNAC_XCHECK_LABS`
+(`meta.yaml`, `checks/`, conf du cluster), sans exécuteur de référence ni
+cluster : il dit sur n'importe quel poste si la CLI accepte le kit (pas de
+`ORACLE_INVALID_KIT`).
 
 Pour un lab à cluster (`cluster:` dans `meta.yaml`), `TestCrossCheck` ne lance
 jamais `make setup`, qui créerait le cluster : l'espace vient de `starter/`
@@ -89,3 +93,8 @@ fois) : `make -C <plateforme>/labs/B3-M3/b3-m3-l1-hardened-pod setup` crée
 `SAGNAC_XCHECK_CLUSTER=1` sur les labs de `B3-M3`, `B3-M4` et `B3-M5`. Sans
 cluster, le cas « dirty v3 » vérifie déjà que les deux exécuteurs prennent
 la branche v3 du ramassage.
+
+Les labs de B4 (`cluster: sagnac-b4`, API sur `127.0.0.1:6580`, modèles
+montés par `MODELES`) et de B5 (`cluster: sagnac-b5`, `127.0.0.1:6570`,
+Kyverno et registre local) se jouent de même, chacun sur son cluster, après
+`make setup` d'un de leurs labs.

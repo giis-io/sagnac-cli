@@ -89,6 +89,23 @@ func TestCrossCheck(t *testing.T) {
 	}
 }
 
+// TestCrossCheckLoad only reads the labs of SAGNAC_XCHECK_LABS, without the
+// reference executor: every one must load (meta.yaml, checks/, the conf of
+// its cluster), so that a kit this CLI cannot read is caught before any run,
+// on any workstation, without a cluster.
+func TestCrossCheckLoad(t *testing.T) {
+	labs := filepath.SplitList(os.Getenv("SAGNAC_XCHECK_LABS"))
+	if len(labs) == 0 {
+		t.Skip("SAGNAC_XCHECK_LABS is not set")
+	}
+	for _, dir := range labs {
+		t.Run(filepath.Base(dir), func(t *testing.T) {
+			lab := mustLoad(t, dir)
+			t.Logf("%-40s cluster %q contract %d models %v", lab.ID, lab.Cluster, lab.ClusterContract, lab.ClusterModels)
+		})
+	}
+}
+
 type state struct {
 	name     string
 	base     string // initial or solution
