@@ -39,7 +39,7 @@ func goodKit() []entry {
 		dir("hello/checks"),
 		executable("hello/checks/verify_bonjour.sh", "#!/bin/sh\nexit 0\n"),
 		dir("hello/.sagnac"),
-		file("hello/.sagnac/tools.manifest", "jq 1.7\n"),
+		file("hello/.sagnac/tools.linux-amd64.manifest", "jq 1.7\n"),
 		dir("_cadre"),
 		file("_cadre/lab.mk", "setup:\n"),
 		dir("_cadre/lib"),

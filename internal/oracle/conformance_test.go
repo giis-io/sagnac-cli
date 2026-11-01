@@ -23,7 +23,7 @@ import (
 
 // Conformance with the reference executor of the lab contract
 // (docs/contrat.md). TestConformanceHello replays the frozen kit of
-// testdata/hello-v3: every state of its workspace must give, field for
+// testdata/hello-v4: every state of its workspace must give, field for
 // field, the result the reference executor gave (testdata/README.md).
 //
 // TestCrossCheck runs the reference executor itself, with the wrong
@@ -36,14 +36,14 @@ import (
 const conformanceSeed = 20261019
 
 func TestConformanceHello(t *testing.T) {
-	k, states := testkit.Load(t, "hello-v3")
+	k, states := testkit.Load(t, "hello-v4")
 	if k.Schema != Schema {
 		t.Fatalf("fixture schema %q, CLI %q", k.Schema, Schema)
 	}
 	if len(states) < 5 {
-		t.Fatalf("hello-v3: only %d states", len(states))
+		t.Fatalf("hello-v4: only %d states", len(states))
 	}
-	root := testkit.Install(t, "hello-v3")
+	root := testkit.Install(t, "hello-v4")
 	lab := mustLoad(t, filepath.Join(root, k.Lab))
 	method, cut := NetworkCutAvailable()
 	t.Logf("network cut: %v (%s)", cut, method)
