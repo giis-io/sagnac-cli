@@ -386,6 +386,48 @@ func TestVerifyClusterV3CleanupFromKit(t *testing.T) {
 	}
 }
 
+// A lab of B5 that judges an admission declares ADMISSION_CONTROLLER_DOWN
+// (Kyverno stopped: admission is open). It is a precondition like any
+// other: error, platform, exit 2, with the message of the lab in French and
+// in English. Its lab namespaces (checks/espace/, selvane-sauvegardes with a
+// dash) are read by the kit, not by the CLI, and never refuse the kit.
+func TestVerifyB5AdmissionControllerDown(t *testing.T) {
+	home := t.TempDir()
+	writeFile(t, filepath.Join(home, ".cache", "sagnac", "clusters", "sagnac-b5", "check.lock"), "", 0o600)
+	t.Setenv("HOME", home)
+	meta := strings.Replace(clusterMeta, "cluster: sagnac-b1", "cluster: sagnac-b5", 1)
+	meta = strings.Replace(meta, "checks:\n", "  - code: ADMISSION_CONTROLLER_DOWN\n    description: \"admission ouverte\"\nchecks:\n", 1)
+	meta = strings.Replace(meta, "preconditions: [CLUSTER_MISSING]", "preconditions: [CLUSTER_MISSING, ADMISSION_CONTROLLER_DOWN]", 1)
+	dir, ws := clusterFixture(t, meta, map[string]string{"one.sh": "sagnac_plateforme ADMISSION_CONTROLLER_DOWN"})
+	cadre := filepath.Join(filepath.Dir(dir), "_cadre")
+	writeFile(t, filepath.Join(cadre, "clusters", "sagnac-b5.conf"), confB5, 0o644)
+	for _, ns := range []string{"selvane", "selvane-sauvegardes", "inventaire"} {
+		writeFile(t, filepath.Join(dir, "checks", "espace", ns+".yaml"),
+			"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: "+ns+"\n", 0o644)
+	}
+	messages := map[string]string{
+		"fr": "Kyverno ne tourne pas : l'admission est ouverte. Relancez `make setup`.",
+		"en": "Kyverno is not running: admission is open. Run `make setup` again.",
+	}
+	for lang, text := range messages {
+		writeFile(t, filepath.Join(dir, "checks", "messages", lang, "ADMISSION_CONTROLLER_DOWN.txt"), text+"\n", 0o644)
+	}
+	lab := mustLoad(t, dir)
+	r, err := Verify(context.Background(), lab, ws, 3, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"error:ADMISSION_CONTROLLER_DOWN:platform"}
+	if got := codes(r); !slices.Equal(got, want) || r.ExitCode() != 2 {
+		t.Errorf("checks %v exit %d, want %v exit 2", got, r.ExitCode(), want)
+	}
+	for lang, text := range messages {
+		if got, ok := lab.MessageText("ADMISSION_CONTROLLER_DOWN", lang); !ok || got != text {
+			t.Errorf("%s message %q, want %q", lang, got, text)
+		}
+	}
+}
+
 // Objects left after the opening cleanup: no check runs, each gives
 // CLUSTER_DIRTY (platform, exit 2); the closing cleanup still runs.
 func TestVerifyClusterDirty(t *testing.T) {
