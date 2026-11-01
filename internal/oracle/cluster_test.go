@@ -342,6 +342,50 @@ sagnac_reussite`})
 	}
 }
 
+// On the clusters v3 of B4 and B5 the collection is still the script of
+// the kit, never a list of kinds in the CLI: Application and ApplicationSet
+// of Argo CD (C3 of B4), the Kyverno policies and the CronJobs of the
+// student namespaces (C1 and C2 of B5) are known to lib/cluster-nettoyage.sh
+// alone, which skips a kind that the cluster does not serve. The CLI runs
+// the script of the kit before and after the run, calls kubectl for none
+// of it, and reads CLUSTER_DIRTY from the exit status of the script only.
+func TestVerifyClusterV3CleanupFromKit(t *testing.T) {
+	for _, c := range []struct{ cluster, conf string }{{"sagnac-b4", confB4}, {"sagnac-b5", confB5}} {
+		t.Run(c.cluster, func(t *testing.T) {
+			home := t.TempDir()
+			writeFile(t, filepath.Join(home, ".cache", "sagnac", "clusters", c.cluster, "check.lock"), "", 0o600)
+			t.Setenv("HOME", home)
+			bin := t.TempDir()
+			kubectlLog := filepath.Join(t.TempDir(), "kubectl")
+			writeFile(t, filepath.Join(bin, "kubectl"), "#!/bin/sh\necho \"$*\" >>"+kubectlLog+"\nexit 0\n", 0o755)
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			meta := strings.Replace(clusterMeta, "cluster: sagnac-b1", "cluster: "+c.cluster, 1)
+			dir, ws := clusterFixture(t, meta, map[string]string{"one.sh": "sagnac_reussite"})
+			writeFile(t, filepath.Join(filepath.Dir(dir), "_cadre", "clusters", c.cluster+".conf"), c.conf, 0o644)
+			log := filepath.Join(t.TempDir(), "calls")
+			recordingCleanup(t, dir, log, 0)
+			lab := mustLoad(t, dir)
+			if lab.ClusterContract != 3 {
+				t.Fatalf("contract %d, want 3", lab.ClusterContract)
+			}
+			r, err := Verify(context.Background(), lab, ws, 3, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.ExitCode() != 0 {
+				t.Fatalf("checks %v, want pass", codes(r))
+			}
+			wantCleanup := "cleanup lab=x cluster=" + c.cluster + " check=unset lib=controle.sh pwd=" + resolve(ws)
+			if got := logLines(t, log); !slices.Equal(got, []string{wantCleanup, wantCleanup}) {
+				t.Errorf("cleanup calls %q, want two runs of the script of the kit", got)
+			}
+			if calls := logLines(t, kubectlLog); len(calls) > 0 {
+				t.Errorf("the CLI called kubectl itself: %q", calls)
+			}
+		})
+	}
+}
+
 // Objects left after the opening cleanup: no check runs, each gives
 // CLUSTER_DIRTY (platform, exit 2); the closing cleanup still runs.
 func TestVerifyClusterDirty(t *testing.T) {

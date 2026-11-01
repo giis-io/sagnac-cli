@@ -397,3 +397,31 @@ B3-M3 à M5).
   (`_cadre/bin/sagnac-cluster`) lie dans le dossier monté les fichiers des
   outils de `MODELES` que le lab cite dans `tools`. La CLI lit la liste
   sans s'en servir.
+
+## 7 quater. Briques B4 et B5 : ce que porte le kit
+
+Les changements de cadre de B4 et B5 vivent dans le code de confiance du kit
+(`_cadre/bin/sagnac-cluster`, `_cadre/lib/cluster-nettoyage.sh`,
+`_cadre/lib/k8s_v3.py`, `_cadre/clusters/v3/`), que la CLI exécute ou dépose
+tels quels, jamais une copie figée dans son binaire :
+
+- **Ramassage.** La CLI n'a pas de liste de sortes ni d'appel `kubectl` à
+  elle : `lib/cluster-nettoyage.sh` du kit ramasse les `Application` et
+  `ApplicationSet` d'Argo CD (finaliseurs retirés), les politiques Kyverno
+  de l'élève et les `CronJob` des espaces élèves, et saute une sorte que le
+  cluster ne sert pas (sans Argo CD ni Kyverno). `CLUSTER_DIRTY` ne vient
+  que du code de sortie du script (section 7).
+- **Gardes des manifestes.** Les sortes permises
+  (`validatingpolicy.policies.kyverno.io`, `cronjob.batch`), la garde des
+  expressions CEL et les espaces réservés sont tenus par `lib/k8s_v3.py` et
+  `bin/sagnac-cluster` ; la CLI ne lit ni `SAGNAC_K8S_SORTES` ni
+  `checks/espace/`, et n'a donc aucun nom d'espace élève à refuser.
+- **Conf de cluster.** `sagnac-b5` et `sagnac-essai-b5` n'ont que
+  `API_PORT` et `CONTRAT=3` (section 7 bis).
+- **Précondition `ADMISSION_CONTROLLER_DOWN`.** Déclarée par chaque lab qui
+  juge une admission (Kyverno arrêté : l'admission est ouverte). C'est une
+  précondition comme une autre : `error`, origine `platform`, code 2, avec
+  le message du lab (section 6).
+- **Outils.** `make tools` et `make setup` du kit obtiennent les outils et
+  les images (Kyverno, Argo CD, registre local) ; la CLI n'en télécharge
+  aucun.
