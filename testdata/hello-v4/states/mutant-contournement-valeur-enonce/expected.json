@@ -1,15 +1,15 @@
 {
   "declared_exit": 1,
   "declared_failures": [
-    "verify_usage:HELLO_USAGE_ON_STDOUT"
+    "verify_greeting:HELLO_GREETING_UNEXPECTED"
   ],
   "result": {
     "schema": "sagnac-result/2",
     "lab": {
       "id": "hello",
-      "version": 3
+      "version": 4
     },
-    "checks_sha256": "7d3f8ff301086c486f10e5d4f812200a5b1b6afbce02782441bcc1e9b7bcaa76",
+    "checks_sha256": "34bf3ccf4fdd2656c555be0b76b0a19e23059c277728faa25c2248108c746cbf",
     "session": "local",
     "seed": 20261019,
     "status": "fail",
@@ -28,19 +28,19 @@
       {
         "id": "verify_greeting",
         "step": 2,
-        "status": "pass",
-        "code": null,
-        "origin": null,
-        "observed": "compliant",
+        "status": "fail",
+        "code": "HELLO_GREETING_UNEXPECTED",
+        "origin": "student",
+        "observed": "other_text",
         "expected": "compliant",
         "blocked_by": null
       },
       {
         "id": "verify_usage",
         "step": 3,
-        "status": "fail",
-        "code": "HELLO_USAGE_ON_STDOUT",
-        "origin": "student",
+        "status": "pass",
+        "code": null,
+        "origin": null,
         "observed": 64,
         "expected": 64,
         "blocked_by": null

@@ -21,7 +21,7 @@ restent en français, langue de référence.
 | `<lab>/checks/` | scripts des contrôles et `messages/<langue>/<CODE>.txt` |
 | `<lab>/starter/` | point de départ de l'espace de travail |
 | `<lab>/Makefile` | inclut `../_cadre/lab.mk` (cibles `tools`, `setup`, `clean`) |
-| `<lab>/.sagnac/tools.manifest` | présent si le lab déclare des outils |
+| `<lab>/.sagnac/tools.<plateforme>.manifest` | un par plateforme (`darwin-arm64`, `darwin-amd64`, `linux-amd64`, `linux-arm64`), présents si le lab déclare des outils ; `lab.mk` choisit celui du poste |
 | `_cadre/lab.mk`, `_cadre/lib/controle.sh`, `_cadre/bin/sagnac-tools` | cadre commun à tous les labs |
 
 L'énoncé, les indices et la solution ne sont jamais dans le kit. L'archive est

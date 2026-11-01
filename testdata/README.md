@@ -4,9 +4,9 @@ Ces fichiers sont produits par la plateforme, pas écrits à la main. Ne les
 modifiez pas : un test qui ne passe plus signale un écart entre la CLI et le
 contrat (`docs/contrat.md`), pas une fixture à corriger.
 
-## `hello-v3/`
+## `hello-v4/`
 
-Le lab `hello`, version 3, contrat v2.
+Le lab `hello`, version 4, contrat v2.
 
 `hello` est le lab de démonstration de la formation : dix minutes, gratuit, un
 script shell à écrire. Sa solution de référence et six mauvaises
