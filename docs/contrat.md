@@ -359,9 +359,10 @@ v2 (`sagnac-b1`), avec `CONTRAT=3` un cluster du contrat v3 (`sagnac-b3`,
 B3-M3 à M5).
 
 - **Lecture de la conf.** Lignes vides et lignes qui commencent par `#`
-  ignorées. Seules les clés `API_PORT` et `CONTRAT`, chacune une fois au
-  plus, valeur prise telle quelle (sans retrait d'espaces) ; `CONTRAT`
-  absent ou `3`. Toute autre ligne ou valeur (`CONTRAT=9`, clé d'un contrat
+  ignorées. Seules les clés `API_PORT`, `CONTRAT` et `MODELES`, chacune une
+  fois au plus, valeur prise telle quelle (sans retrait d'espaces) ;
+  `CONTRAT` absent ou `3` ; `MODELES` (section 7 ter) sur un cluster v3
+  seulement. Toute autre ligne ou valeur (`CONTRAT=9`, clé d'un contrat
   plus récent, clé en double, ligne indentée) refuse le kit :
   `ORACLE_INVALID_KIT`, code 3, avant tout contrôle, sans session ni envoi.
   Une CLI qui ne connaît pas le contrat d'un cluster ne juge jamais ses
@@ -379,3 +380,20 @@ B3-M3 à M5).
   que `_cadre/bin/sagnac-cluster` copie dans
   `~/.cache/sagnac/clusters/<nom>/v3/` à la création du cluster. La CLI les
   dépose tels quels et ne les lit pas.
+
+## 7 ter. Modèles montés dans le nœud (B4)
+
+`_cadre/clusters/<nom>.conf` d'un cluster v3 peut porter une ligne
+`MODELES=<outil>[,<outil>]...` (`sagnac-b4`) : les outils de
+`versions.yaml` dont le fichier est monté en lecture seule dans le nœud
+(`/var/lib/sagnac/modeles`).
+
+- **Lecture.** Valeur non vide, noms `[a-z0-9._-]+` séparés par une seule
+  virgule, sans espace ni chemin (`MODELES=../etc,a` refusé). `MODELES` sur
+  un cluster sans `CONTRAT=3` : kit refusé. Les refus sont ceux de la
+  section 7 bis (`ORACLE_INVALID_KIT`, code 3), comme ceux de
+  `_cadre/bin/sagnac-cluster` et de l'exécuteur de référence.
+- **Montage.** `sagnac check` ne monte rien : `make setup` du kit
+  (`_cadre/bin/sagnac-cluster`) lie dans le dossier monté les fichiers des
+  outils de `MODELES` que le lab cite dans `tools`. La CLI lit la liste
+  sans s'en servir.

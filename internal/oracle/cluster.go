@@ -26,9 +26,12 @@ const (
 var (
 	reCluster  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 	reConfPort = regexp.MustCompile(`^[0-9]+$`)
+	// reModels is the value of MODELES: names of tools separated by commas
+	// (RE_MODELES of the reference executor).
+	reModels = regexp.MustCompile(`^[a-z0-9._-]+(,[a-z0-9._-]+)*$`)
 	// confKeys are the only keys of _cadre/clusters/<name>.conf (contract
 	// of the cluster v3, docs/contrat.md, section 7 bis).
-	confKeys = []string{"API_PORT", "CONTRAT"}
+	confKeys = []string{"API_PORT", "CONTRAT", "MODELES"}
 	// clusterTools are the tools a lab with a cluster declares in tools
 	// (bin/sagnac-cluster reads them from the Sagnac cache).
 	clusterTools = []string{"k3d", "kubectl", "k3s", "k3s-airgap", "k3d-tools"}
@@ -69,7 +72,7 @@ func (l *Lab) loadCluster(meta map[string]any) error {
 	if len(missing) > 0 {
 		return kitErr("meta.yaml", "a lab with a cluster declares in tools: "+strings.Join(missing, ", "))
 	}
-	l.Cluster, l.APIPort, l.ClusterContract = name, conf.apiPort, conf.contract
+	l.Cluster, l.APIPort, l.ClusterContract, l.ClusterModels = name, conf.apiPort, conf.contract, conf.models
 	return nil
 }
 
@@ -89,19 +92,23 @@ func declaresTool(tools any, tool string) bool {
 
 // clusterConf is what _cadre/clusters/<name>.conf says: the port of the API
 // on 127.0.0.1 and the version of the cluster contract (2 without the line
-// CONTRAT, 3 with CONTRAT=3).
+// CONTRAT, 3 with CONTRAT=3) and the tools of MODELES, whose files make setup
+// mounts read-only in the node (nil without the line MODELES).
 type clusterConf struct {
 	apiPort  int
 	contract int
+	models   []string
 }
 
 // readClusterConf reads <cadre>/clusters/<name>.conf like conf_cluster of the
 // reference executor and conf_valide of bin/sagnac-cluster: lines KEY=value,
-// empty lines and lines that start with # skipped. Only API_PORT and
-// CONTRAT, each at most once, values taken as written (no blank removed);
-// API_PORT between 1 and 65535, CONTRAT absent or 3. Anything else, such as
-// CONTRAT=9 or a key of a later contract, refuses the kit: a CLI that does
-// not know a contract never runs its checks.
+// empty lines and lines that start with # skipped. Only API_PORT, CONTRAT
+// and MODELES, each at most once, values taken as written (no blank
+// removed); API_PORT between 1 and 65535, CONTRAT absent or 3, MODELES a
+// list of tool names separated by commas, on a cluster of the contract v3
+// only. Anything else, such as CONTRAT=9 or a key of a later contract,
+// refuses the kit: a CLI that does not know a contract never runs its
+// checks. check mounts nothing: the models are mounted by make setup.
 func readClusterConf(cadre, name string) (clusterConf, error) {
 	where := "clusters/" + name + ".conf"
 	path := filepath.Join(cadre, "clusters", name+".conf")
@@ -119,7 +126,7 @@ func readClusterConf(cadre, name string) (clusterConf, error) {
 		}
 		key, value, found := strings.Cut(line, "=")
 		if _, seen := values[key]; !found || !slices.Contains(confKeys, key) || seen {
-			return clusterConf{}, kitErr(where, "unknown line "+strconv.Quote(line)+" (keys: API_PORT, CONTRAT)")
+			return clusterConf{}, kitErr(where, "unknown line "+strconv.Quote(line)+" (keys: API_PORT, CONTRAT, MODELES)")
 		}
 		values[key] = value
 	}
@@ -133,6 +140,15 @@ func readClusterConf(cadre, name string) (clusterConf, error) {
 			return clusterConf{}, kitErr(where, "CONTRAT="+contract+" unknown (only value: 3)")
 		}
 		conf.contract = 3
+	}
+	if models, ok := values["MODELES"]; ok {
+		if !reModels.MatchString(models) {
+			return clusterConf{}, kitErr(where, "invalid MODELES (names of tools separated by commas)")
+		}
+		if conf.contract != 3 {
+			return clusterConf{}, kitErr(where, "MODELES requires CONTRAT=3")
+		}
+		conf.models = strings.Split(models, ",")
 	}
 	return conf, nil
 }
