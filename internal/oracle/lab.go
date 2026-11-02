@@ -134,10 +134,12 @@ type Lab struct {
 	// without one (docs/contrat.md, section 7); APIPort is the port of its
 	// API on 127.0.0.1 and ClusterContract the version of its contract (2,
 	// or 3 with CONTRAT=3, section 7 bis), both read in
-	// _cadre/clusters/<name>.conf.
+	// _cadre/clusters/<name>.conf. ClusterModels lists the tools of its
+	// MODELES line (section 7 ter), mounted by make setup, never by check.
 	Cluster         string
 	APIPort         int
 	ClusterContract int
+	ClusterModels   []string
 	// Teardown is checks/teardown.sh when the lab has one, run after the
 	// last check.
 	Teardown string

@@ -359,9 +359,10 @@ v2 (`sagnac-b1`), avec `CONTRAT=3` un cluster du contrat v3 (`sagnac-b3`,
 B3-M3 à M5).
 
 - **Lecture de la conf.** Lignes vides et lignes qui commencent par `#`
-  ignorées. Seules les clés `API_PORT` et `CONTRAT`, chacune une fois au
-  plus, valeur prise telle quelle (sans retrait d'espaces) ; `CONTRAT`
-  absent ou `3`. Toute autre ligne ou valeur (`CONTRAT=9`, clé d'un contrat
+  ignorées. Seules les clés `API_PORT`, `CONTRAT` et `MODELES`, chacune une
+  fois au plus, valeur prise telle quelle (sans retrait d'espaces) ;
+  `CONTRAT` absent ou `3` ; `MODELES` (section 7 ter) sur un cluster v3
+  seulement. Toute autre ligne ou valeur (`CONTRAT=9`, clé d'un contrat
   plus récent, clé en double, ligne indentée) refuse le kit :
   `ORACLE_INVALID_KIT`, code 3, avant tout contrôle, sans session ni envoi.
   Une CLI qui ne connaît pas le contrat d'un cluster ne juge jamais ses
@@ -379,3 +380,48 @@ B3-M3 à M5).
   que `_cadre/bin/sagnac-cluster` copie dans
   `~/.cache/sagnac/clusters/<nom>/v3/` à la création du cluster. La CLI les
   dépose tels quels et ne les lit pas.
+
+## 7 ter. Modèles montés dans le nœud (B4)
+
+`_cadre/clusters/<nom>.conf` d'un cluster v3 peut porter une ligne
+`MODELES=<outil>[,<outil>]...` (`sagnac-b4`) : les outils de
+`versions.yaml` dont le fichier est monté en lecture seule dans le nœud
+(`/var/lib/sagnac/modeles`).
+
+- **Lecture.** Valeur non vide, noms `[a-z0-9._-]+` séparés par une seule
+  virgule, sans espace ni chemin (`MODELES=../etc,a` refusé). `MODELES` sur
+  un cluster sans `CONTRAT=3` : kit refusé. Les refus sont ceux de la
+  section 7 bis (`ORACLE_INVALID_KIT`, code 3), comme ceux de
+  `_cadre/bin/sagnac-cluster` et de l'exécuteur de référence.
+- **Montage.** `sagnac check` ne monte rien : `make setup` du kit
+  (`_cadre/bin/sagnac-cluster`) lie dans le dossier monté les fichiers des
+  outils de `MODELES` que le lab cite dans `tools`. La CLI lit la liste
+  sans s'en servir.
+
+## 7 quater. Briques B4 et B5 : ce que porte le kit
+
+Les changements de cadre de B4 et B5 vivent dans le code de confiance du kit
+(`_cadre/bin/sagnac-cluster`, `_cadre/lib/cluster-nettoyage.sh`,
+`_cadre/lib/k8s_v3.py`, `_cadre/clusters/v3/`), que la CLI exécute ou dépose
+tels quels, jamais une copie figée dans son binaire :
+
+- **Ramassage.** La CLI n'a pas de liste de sortes ni d'appel `kubectl` à
+  elle : `lib/cluster-nettoyage.sh` du kit ramasse les `Application` et
+  `ApplicationSet` d'Argo CD (finaliseurs retirés), les politiques Kyverno
+  de l'élève et les `CronJob` des espaces élèves, et saute une sorte que le
+  cluster ne sert pas (sans Argo CD ni Kyverno). `CLUSTER_DIRTY` ne vient
+  que du code de sortie du script (section 7).
+- **Gardes des manifestes.** Les sortes permises
+  (`validatingpolicy.policies.kyverno.io`, `cronjob.batch`), la garde des
+  expressions CEL et les espaces réservés sont tenus par `lib/k8s_v3.py` et
+  `bin/sagnac-cluster` ; la CLI ne lit ni `SAGNAC_K8S_SORTES` ni
+  `checks/espace/`, et n'a donc aucun nom d'espace élève à refuser.
+- **Conf de cluster.** `sagnac-b5` et `sagnac-essai-b5` n'ont que
+  `API_PORT` et `CONTRAT=3` (section 7 bis).
+- **Précondition `ADMISSION_CONTROLLER_DOWN`.** Déclarée par chaque lab qui
+  juge une admission (Kyverno arrêté : l'admission est ouverte). C'est une
+  précondition comme une autre : `error`, origine `platform`, code 2, avec
+  le message du lab (section 6).
+- **Outils.** `make tools` et `make setup` du kit obtiennent les outils et
+  les images (Kyverno, Argo CD, registre local) ; la CLI n'en télécharge
+  aucun.

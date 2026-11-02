@@ -110,6 +110,10 @@ func TestLoadLabClusterRejects(t *testing.T) {
 		{"port not a number", clusterMeta, "API_PORT=abc\n", "API_PORT"},
 		{"port out of range", clusterMeta, "API_PORT=70000\n", "API_PORT"},
 		{"port zero", clusterMeta, "API_PORT=0\n", "API_PORT"},
+		{"models on a cluster v2", clusterMeta, "API_PORT=6599\nMODELES=qwen3-0.6b-q4_0\n", "MODELES requires CONTRAT=3"},
+		{"models empty", clusterMeta, "API_PORT=6599\nCONTRAT=3\nMODELES=\n", "invalid MODELES"},
+		{"models with a path", clusterMeta, "API_PORT=6599\nCONTRAT=3\nMODELES=../etc,a\n", "invalid MODELES"},
+		{"models twice", clusterMeta, "API_PORT=6599\nCONTRAT=3\nMODELES=a\nMODELES=b\n", `unknown line "MODELES=b"`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -151,6 +155,91 @@ func TestLoadLabClusterContract(t *testing.T) {
 				t.Errorf("port %d, contract %d; want %d, %d", lab.APIPort, lab.ClusterContract, c.port, c.want)
 			}
 		})
+	}
+}
+
+// Confs of the clusters of B4 and B5, as the cadre ships them.
+const (
+	confB4 = `# Cluster de la brique B4 (docs/programme/B4/README.md), contrat v3 (ADR-007, CONTRAT.md § 7 quater). Un seul
+# cluster Sagnac en marche à la fois : make setup arrête les autres. Lu par bin/sagnac-cluster et sagnac_local.py.
+# MODELES (C1) : fichiers GGUF montés en lecture seule dans le nœud (/var/lib/sagnac/modeles), quand le lab les
+# cite dans tools (M3 seulement) ; le routeur de llama-server les lit par un volume hostPath posé par l'administrateur.
+API_PORT=6580
+CONTRAT=3
+MODELES=qwen3-0.6b-q4_0,qwen3-1.7b-q4_k_m
+`
+	confB5 = `# Cluster de la brique B5 (contrat v3, ADR-007, CONTRAT.md § 7 quater ; changement C3 du plan de B5). Un seul
+# cluster Sagnac en marche à la fois : make setup arrête les autres, dont sagnac-b3. Kyverno (admission seule) et
+# le registre local sont posés par make setup quand le lab cite les outils kyverno et registre-oci.
+API_PORT=6570
+CONTRAT=3
+`
+	confEssaiB5 = `# Cluster des tests du socle S2 de B5 (labs/_cadre/tests/test_cluster.py, TestClusterB5), usine seulement.
+API_PORT=6553
+CONTRAT=3
+`
+)
+
+// The confs of B4 and B5 and the cases of test_conf_cluster_cles_fermees of
+// the cadre: MODELES (C1 of B4) is a list of tools, on a cluster v3 only;
+// sagnac-b5 and sagnac-essai-b5 (C3 of B5) add no key. A conf the CLI
+// refuses is ORACLE_INVALID_KIT, code 3, like bin/sagnac-cluster.
+func TestReadClusterConfB4B5(t *testing.T) {
+	for _, c := range []struct {
+		name, conf string
+		want       clusterConf
+		reason     string
+	}{
+		{"sagnac-b4", confB4, clusterConf{6580, 3, []string{"qwen3-0.6b-q4_0", "qwen3-1.7b-q4_k_m"}}, ""},
+		{"sagnac-b5", confB5, clusterConf{6570, 3, nil}, ""},
+		{"sagnac-essai-b5", confEssaiB5, clusterConf{6553, 3, nil}, ""},
+		{"sagnac-zz-un-modele", "API_PORT=6599\nCONTRAT=3\nMODELES=qwen3-0.6b-q4_0\n", clusterConf{6599, 3, []string{"qwen3-0.6b-q4_0"}}, ""},
+		{"sagnac-zz-modeles-avant", "MODELES=a.b_c-d,e\nCONTRAT=3\nAPI_PORT=6599\n", clusterConf{6599, 3, []string{"a.b_c-d", "e"}}, ""},
+		{"sagnac-zz-contrat9", "API_PORT=6599\nCONTRAT=9\n", clusterConf{}, "CONTRAT=9 unknown"},
+		{"sagnac-zz-cle", "API_PORT=6599\nRUNSC=1\n", clusterConf{}, `unknown line "RUNSC=1" (keys: API_PORT, CONTRAT, MODELES)`},
+		{"sagnac-zz-modeles-v2", "API_PORT=6599\nMODELES=qwen3-0.6b-q4_0\n", clusterConf{}, "MODELES requires CONTRAT=3"},
+		{"sagnac-zz-modeles-vide", "API_PORT=6599\nCONTRAT=3\nMODELES=\n", clusterConf{}, "invalid MODELES"},
+		{"sagnac-zz-modeles-chemin", "API_PORT=6599\nCONTRAT=3\nMODELES=../etc,a\n", clusterConf{}, "invalid MODELES"},
+		{"sagnac-zz-virgule-avant", "API_PORT=6599\nCONTRAT=3\nMODELES=,a\n", clusterConf{}, "invalid MODELES"},
+		{"sagnac-zz-virgule-apres", "API_PORT=6599\nCONTRAT=3\nMODELES=a,\n", clusterConf{}, "invalid MODELES"},
+		{"sagnac-zz-deux-virgules", "API_PORT=6599\nCONTRAT=3\nMODELES=a,,b\n", clusterConf{}, "invalid MODELES"},
+		{"sagnac-zz-modeles-blanc", "API_PORT=6599\nCONTRAT=3\nMODELES=a, b\n", clusterConf{}, "invalid MODELES"},
+		{"sagnac-zz-majuscules", "API_PORT=6599\nCONTRAT=3\nMODELES=Qwen\n", clusterConf{}, "invalid MODELES"},
+		{"sagnac-zz-modeles-contrat9", "API_PORT=6599\nCONTRAT=9\nMODELES=a\n", clusterConf{}, "CONTRAT=9 unknown"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cadre := t.TempDir()
+			writeFile(t, filepath.Join(cadre, "clusters", c.name+".conf"), c.conf, 0o644)
+			got, err := readClusterConf(cadre, c.name)
+			if c.reason == "" {
+				if err != nil {
+					t.Fatalf("readClusterConf: %v", err)
+				}
+				if got.apiPort != c.want.apiPort || got.contract != c.want.contract || !slices.Equal(got.models, c.want.models) {
+					t.Errorf("conf %+v, want %+v", got, c.want)
+				}
+				return
+			}
+			var kit *KitError
+			if !errors.As(err, &kit) {
+				t.Fatalf("readClusterConf error = %v, want a KitError", err)
+			}
+			if !strings.Contains(kit.Error(), c.reason) {
+				t.Errorf("error %q does not name %q", kit.Error(), c.reason)
+			}
+		})
+	}
+}
+
+// A lab on the cluster of B4 loads with the models of its conf.
+func TestLoadLabClusterModels(t *testing.T) {
+	meta := strings.Replace(clusterMeta, "cluster: sagnac-b1", "cluster: sagnac-b4", 1)
+	dir, _ := clusterFixture(t, meta, map[string]string{"one.sh": "sagnac_reussite"})
+	writeFile(t, filepath.Join(filepath.Dir(dir), "_cadre", "clusters", "sagnac-b4.conf"), confB4, 0o644)
+	lab := mustLoad(t, dir)
+	if lab.Cluster != "sagnac-b4" || lab.APIPort != 6580 || lab.ClusterContract != 3 ||
+		!slices.Equal(lab.ClusterModels, []string{"qwen3-0.6b-q4_0", "qwen3-1.7b-q4_k_m"}) {
+		t.Errorf("cluster %q, port %d, contract %d, models %v", lab.Cluster, lab.APIPort, lab.ClusterContract, lab.ClusterModels)
 	}
 }
 
@@ -250,6 +339,92 @@ sagnac_reussite`})
 	}
 	if r.DurationMS >= 1000 {
 		t.Errorf("duration_ms %d counts the cleanup", r.DurationMS)
+	}
+}
+
+// On the clusters v3 of B4 and B5 the collection is still the script of
+// the kit, never a list of kinds in the CLI: Application and ApplicationSet
+// of Argo CD (C3 of B4), the Kyverno policies and the CronJobs of the
+// student namespaces (C1 and C2 of B5) are known to lib/cluster-nettoyage.sh
+// alone, which skips a kind that the cluster does not serve. The CLI runs
+// the script of the kit before and after the run, calls kubectl for none
+// of it, and reads CLUSTER_DIRTY from the exit status of the script only.
+func TestVerifyClusterV3CleanupFromKit(t *testing.T) {
+	for _, c := range []struct{ cluster, conf string }{{"sagnac-b4", confB4}, {"sagnac-b5", confB5}} {
+		t.Run(c.cluster, func(t *testing.T) {
+			home := t.TempDir()
+			writeFile(t, filepath.Join(home, ".cache", "sagnac", "clusters", c.cluster, "check.lock"), "", 0o600)
+			t.Setenv("HOME", home)
+			bin := t.TempDir()
+			kubectlLog := filepath.Join(t.TempDir(), "kubectl")
+			writeFile(t, filepath.Join(bin, "kubectl"), "#!/bin/sh\necho \"$*\" >>"+kubectlLog+"\nexit 0\n", 0o755)
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			meta := strings.Replace(clusterMeta, "cluster: sagnac-b1", "cluster: "+c.cluster, 1)
+			dir, ws := clusterFixture(t, meta, map[string]string{"one.sh": "sagnac_reussite"})
+			writeFile(t, filepath.Join(filepath.Dir(dir), "_cadre", "clusters", c.cluster+".conf"), c.conf, 0o644)
+			log := filepath.Join(t.TempDir(), "calls")
+			recordingCleanup(t, dir, log, 0)
+			lab := mustLoad(t, dir)
+			if lab.ClusterContract != 3 {
+				t.Fatalf("contract %d, want 3", lab.ClusterContract)
+			}
+			r, err := Verify(context.Background(), lab, ws, 3, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.ExitCode() != 0 {
+				t.Fatalf("checks %v, want pass", codes(r))
+			}
+			wantCleanup := "cleanup lab=x cluster=" + c.cluster + " check=unset lib=controle.sh pwd=" + resolve(ws)
+			if got := logLines(t, log); !slices.Equal(got, []string{wantCleanup, wantCleanup}) {
+				t.Errorf("cleanup calls %q, want two runs of the script of the kit", got)
+			}
+			if calls := logLines(t, kubectlLog); len(calls) > 0 {
+				t.Errorf("the CLI called kubectl itself: %q", calls)
+			}
+		})
+	}
+}
+
+// A lab of B5 that judges an admission declares ADMISSION_CONTROLLER_DOWN
+// (Kyverno stopped: admission is open). It is a precondition like any
+// other: error, platform, exit 2, with the message of the lab in French and
+// in English. Its lab namespaces (checks/espace/, selvane-sauvegardes with a
+// dash) are read by the kit, not by the CLI, and never refuse the kit.
+func TestVerifyB5AdmissionControllerDown(t *testing.T) {
+	home := t.TempDir()
+	writeFile(t, filepath.Join(home, ".cache", "sagnac", "clusters", "sagnac-b5", "check.lock"), "", 0o600)
+	t.Setenv("HOME", home)
+	meta := strings.Replace(clusterMeta, "cluster: sagnac-b1", "cluster: sagnac-b5", 1)
+	meta = strings.Replace(meta, "checks:\n", "  - code: ADMISSION_CONTROLLER_DOWN\n    description: \"admission ouverte\"\nchecks:\n", 1)
+	meta = strings.Replace(meta, "preconditions: [CLUSTER_MISSING]", "preconditions: [CLUSTER_MISSING, ADMISSION_CONTROLLER_DOWN]", 1)
+	dir, ws := clusterFixture(t, meta, map[string]string{"one.sh": "sagnac_plateforme ADMISSION_CONTROLLER_DOWN"})
+	cadre := filepath.Join(filepath.Dir(dir), "_cadre")
+	writeFile(t, filepath.Join(cadre, "clusters", "sagnac-b5.conf"), confB5, 0o644)
+	for _, ns := range []string{"selvane", "selvane-sauvegardes", "inventaire"} {
+		writeFile(t, filepath.Join(dir, "checks", "espace", ns+".yaml"),
+			"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: "+ns+"\n", 0o644)
+	}
+	messages := map[string]string{
+		"fr": "Kyverno ne tourne pas : l'admission est ouverte. Relancez `make setup`.",
+		"en": "Kyverno is not running: admission is open. Run `make setup` again.",
+	}
+	for lang, text := range messages {
+		writeFile(t, filepath.Join(dir, "checks", "messages", lang, "ADMISSION_CONTROLLER_DOWN.txt"), text+"\n", 0o644)
+	}
+	lab := mustLoad(t, dir)
+	r, err := Verify(context.Background(), lab, ws, 3, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"error:ADMISSION_CONTROLLER_DOWN:platform"}
+	if got := codes(r); !slices.Equal(got, want) || r.ExitCode() != 2 {
+		t.Errorf("checks %v exit %d, want %v exit 2", got, r.ExitCode(), want)
+	}
+	for lang, text := range messages {
+		if got, ok := lab.MessageText("ADMISSION_CONTROLLER_DOWN", lang); !ok || got != text {
+			t.Errorf("%s message %q, want %q", lang, got, text)
+		}
 	}
 }
 
