@@ -56,7 +56,7 @@ jobs:
     if: ${{ startsWith(github.ref, 'refs/tags/v') && startsWith(inputs.runner, 'sagnac-release-') }}
     environment: release
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 40
+    timeout-minutes: 58
     permissions:
       contents: write # create the release
       id-token: write # OIDC token of the keyless signature and of the attestations
@@ -198,8 +198,9 @@ jobs:
             cp "$bin" "$s/zip/$arch/sagnac"
           done
           # A bare binary cannot be stapled: Gatekeeper finds the ticket online.
+          # Apple took 2 h for the first submission (rc.3) and usually minutes after.
           (cd "$s/zip" && python3 -m zipfile -c "$s/sagnac-darwin.zip" arm64 amd64)
-          "$rcodesign" notary-submit --api-key-file "$s/notary.json" --wait --max-wait-seconds 1200 "$s/sagnac-darwin.zip"
+          "$rcodesign" notary-submit --api-key-file "$s/notary.json" --wait --max-wait-seconds 2700 "$s/sagnac-darwin.zip"
 
       - name: archive and checksum
         run: |
