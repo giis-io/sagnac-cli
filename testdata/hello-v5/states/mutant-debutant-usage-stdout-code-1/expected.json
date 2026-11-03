@@ -1,15 +1,15 @@
 {
   "declared_exit": 1,
   "declared_failures": [
-    "verify_usage:HELLO_USAGE_ON_STDOUT"
+    "verify_usage:HELLO_USAGE_EXIT_CODE_AND_STDOUT"
   ],
   "result": {
     "schema": "sagnac-result/2",
     "lab": {
       "id": "hello",
-      "version": 4
+      "version": 5
     },
-    "checks_sha256": "34bf3ccf4fdd2656c555be0b76b0a19e23059c277728faa25c2248108c746cbf",
+    "checks_sha256": "429d4917cab1d3f4a637c1500dcd76fc9bdda0972ad83c14533aa647dec4485a",
     "session": "local",
     "seed": 20261019,
     "status": "fail",
@@ -39,9 +39,9 @@
         "id": "verify_usage",
         "step": 3,
         "status": "fail",
-        "code": "HELLO_USAGE_ON_STDOUT",
+        "code": "HELLO_USAGE_EXIT_CODE_AND_STDOUT",
         "origin": "student",
-        "observed": 64,
+        "observed": 1,
         "expected": 64,
         "blocked_by": null
       }

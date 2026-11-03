@@ -1,8 +1,0 @@
-{
-  "lab": "hello",
-  "version": 4,
-  "schema": "sagnac-result/2",
-  "sha256": "0dd8b56bc99aaa46191811c5851a16ed604a30bae7d05783f965fc0346d774b3",
-  "checks_sha256": "34bf3ccf4fdd2656c555be0b76b0a19e23059c277728faa25c2248108c746cbf",
-  "seed": 20261019
-}
