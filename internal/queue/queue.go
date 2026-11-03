@@ -25,8 +25,8 @@ import (
 const MaxAge = 30 * 24 * time.Hour
 
 // MaxEntry bounds the size of an entry read back: the server refuses a
-// result over 256 KiB, so a larger file is not an attempt.
-const MaxEntry = 256 << 10
+// result over 48 KiB, so a larger file is not an attempt.
+const MaxEntry = 48 << 10
 
 // maxFuture: an entry dated further ahead than this was not written by this
 // clock; it is deleted.

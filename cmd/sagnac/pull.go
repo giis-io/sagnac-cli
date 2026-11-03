@@ -213,8 +213,22 @@ func reportKitAPIError(w io.Writer, e *api.APIError, lab string, session bool) {
 		fmt.Fprintln(w, loginAdvice(session))
 	case codeKitDownloadLimit:
 		reportKitLimit(w, e)
+	case codeTooManyRequests:
+		reportKitRateLimited(w, e)
 	default:
 		fmt.Fprintln(w, i18n.T("error.unexpected_response"))
+	}
+}
+
+// reportKitRateLimited: the account sent too many kit requests over the hour
+// (docs/api/erreurs.md, TOO_MANY_REQUESTS). The local time of resumption
+// (Retry-After) is shown; no new try.
+func reportKitRateLimited(w io.Writer, e *api.APIError) {
+	now := clock()
+	if at := resumeAt(e, now); !at.IsZero() {
+		fmt.Fprintln(w, i18n.T("pull.rate_limited", resumeText(at, now)))
+	} else {
+		fmt.Fprintln(w, i18n.T("pull.rate_limited_later"))
 	}
 }
 

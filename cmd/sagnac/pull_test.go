@@ -594,6 +594,43 @@ func TestPullKitDownloadLimit(t *testing.T) {
 	}
 }
 
+// The platform limits the downloads of an account per hour (TOO_MANY_REQUESTS
+// on GET /v1/kits/<lab>/<version>, docs/api/erreurs.md). The message gives
+// the local time of resumption (Retry-After); code 2, the environment does not
+// allow the download now; one download request only, nothing written.
+func TestPullRateLimited(t *testing.T) {
+	now := time.Date(2026, 10, 24, 11, 0, 0, 0, time.UTC) // 13:00 local
+	cases := []struct {
+		name, after string
+		want        string
+	}{
+		{"Retry-After", "1800", i18n.T("pull.rate_limited", i18n.T("resume.today", "13:30"))},
+		{"no Retry-After", "", i18n.T("pull.rate_limited_later")},
+	}
+	for _, c := range cases {
+		p := newPullRig(t)
+		withLocalZone(t, now)
+		p.kits.limitBody, p.kits.limitAfter = `{"code": "TOO_MANY_REQUESTS"}`, c.after
+		code, stdout, stderr := p.run(t, "pull", "hello")
+		if code != exitEnvironment || stdout != "" {
+			t.Errorf("%s: code %d, stdout %q, stderr %q", c.name, code, stdout, stderr)
+		}
+		if !strings.Contains(stderr, c.want) || strings.Contains(stderr, i18n.T("error.unexpected_response")) {
+			t.Errorf("%s: stderr %q lacks %q", c.name, stderr, c.want)
+		}
+		downloads := 0
+		for _, path := range p.kits.requested() {
+			if path == "/v1/kits/hello/3" {
+				downloads++
+			}
+		}
+		if downloads != 1 {
+			t.Errorf("%s: %d download requests, want 1 (no new try)", c.name, downloads)
+		}
+		p.nothingWritten(t)
+	}
+}
+
 // The exit code of KIT_DOWNLOAD_LIMIT is a refusal, though its status is 429.
 func TestKitDownloadLimitIsARefusal(t *testing.T) {
 	if got := exitCodeOf(&api.APIError{Status: 429, Code: "KIT_DOWNLOAD_LIMIT"}); got != exitFailure {
