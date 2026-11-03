@@ -170,16 +170,17 @@ jobs:
           NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
           VERSION_NAME: ${{ steps.mode.outputs.version }}
-          # rcodesign (apple-codesign) signs and notarizes from Linux.
-          RCODESIGN_URL: https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-x86_64-unknown-linux-musl.tar.gz
-          RCODESIGN_SHA256: dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002
+          # rcodesign (apple-codesign) signs and notarizes from Linux. It reads every
+          # RCODESIGN_* variable as a configuration key: no variable here uses that prefix.
+          CODESIGN_TOOL_URL: https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-x86_64-unknown-linux-musl.tar.gz
+          CODESIGN_TOOL_SHA256: dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002
         run: |
           set -euo pipefail
           [ "$(uname -m)" = x86_64 ] || { echo "rcodesign is pinned for x86_64" >&2; exit 1; }
           s=$(mktemp -d "$RUNNER_TEMP/apple.XXXXXX")
           trap 'rm -rf "$s"' EXIT
-          curl -fsSL --proto '=https' -o "$s/rcodesign.tar.gz" "$RCODESIGN_URL"
-          echo "$RCODESIGN_SHA256  $s/rcodesign.tar.gz" | sha256sum --check --strict
+          curl -fsSL --proto '=https' -o "$s/rcodesign.tar.gz" "$CODESIGN_TOOL_URL"
+          echo "$CODESIGN_TOOL_SHA256  $s/rcodesign.tar.gz" | sha256sum --check --strict
           tar -xzf "$s/rcodesign.tar.gz" -C "$s" --strip-components=1
           rcodesign=$s/rcodesign
           umask 077
