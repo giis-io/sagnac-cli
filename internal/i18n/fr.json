@@ -59,6 +59,8 @@
   "pull.kit_limit_unknown": "Votre compte a atteint le plafond de kits différents téléchargés sur 24 heures : ce kit n'est pas téléchargé. Les kits déjà présents sur ce poste restent utilisables.",
   "pull.kit_limit_resume": "Vous pourrez télécharger ce kit %s (heure locale).",
   "pull.kit_limit_resume_later": "Réessayez plus tard.",
+  "pull.rate_limited": "La plateforme reçoit trop de téléchargements de kits de ce compte : ce kit n'est pas téléchargé. Réessayez %s (heure locale). Les kits déjà présents sur ce poste restent utilisables.",
+  "pull.rate_limited_later": "La plateforme reçoit trop de téléchargements de kits de ce compte : ce kit n'est pas téléchargé. Réessayez dans quelques minutes. Les kits déjà présents sur ce poste restent utilisables.",
   "open.target_missing": "Indiquez le lab ou le module à ouvrir, par exemple « sagnac open hello » ou « sagnac open B1-M1 ».",
   "open.invalid_target": "« %s » n'est pas un lab ni un module : un lab s'écrit en lettres minuscules, chiffres et tirets, un module comme B1-M1.",
   "open.text_module": "L'option --text s'applique à un lab. Pour un module, « sagnac open B1-M1 » enregistre les énoncés sans les ouvrir.",

@@ -222,7 +222,7 @@ func TestRemoveAndPurge(t *testing.T) {
 	}
 }
 
-// An entry larger than 256 KiB (the limit of the server) or dated more than
+// An entry larger than 48 KiB (the limit of the server) or dated more than
 // a day in the future is unreadable: deleted, never sent.
 func TestPendingRejectsOversizedAndFutureEntries(t *testing.T) {
 	now := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
