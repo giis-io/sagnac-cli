@@ -684,7 +684,7 @@ func TestCheckArguments(t *testing.T) {
 }
 
 // Machine output does not depend on the language: check --json on the
-// frozen kit hello (testdata/hello-v4), LANG=fr_FR.UTF-8 then --lang xx,
+// frozen kit hello (testdata/hello-v5), LANG=fr_FR.UTF-8 then --lang xx,
 // gives the same JSON but for started_at and duration_ms.
 func TestTwoLocalesSameJSON(t *testing.T) {
 	setBuildInfo(t)
@@ -696,8 +696,8 @@ func TestTwoLocalesSameJSON(t *testing.T) {
 	oldSeed := localSeed
 	localSeed = func() (int64, error) { return 4242, nil }
 	t.Cleanup(func() { openStore, localSeed = oldOpen, oldSeed })
-	k, _ := testkit.Load(t, "hello-v4")
-	root := testkit.Install(t, "hello-v4")
+	k, _ := testkit.Load(t, "hello-v5")
+	root := testkit.Install(t, "hello-v5")
 	ws := filepath.Join(root, k.Lab, "workspace")
 	if out, err := exec.Command("cp", "-R", filepath.Join(root, k.Lab, "starter"), ws).CombinedOutput(); err != nil {
 		t.Fatalf("%v %s", err, out)
