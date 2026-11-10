@@ -194,7 +194,7 @@ affiché, garde ce code.
 
 ## Fabricant
 
-GIIS, 66 avenue des Champs-Élysées, 75008 Paris.
+GIIS, société française. Coordonnées complètes du fabricant : https://sagnac.fr/mentions-legales
 Contact sécurité : securite@sagnac.fr, voir [SECURITY.md](SECURITY.md).
 
 ## Licence
