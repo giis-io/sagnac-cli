@@ -1,6 +1,6 @@
 # Politique de sécurité
 
-GIIS, 66 avenue des Champs-Élysées, 75008 Paris, est le fabricant de `sagnac`.
+GIIS, société française, est le fabricant de `sagnac`. Ses coordonnées complètes figurent dans les mentions légales : https://sagnac.fr/mentions-legales
 
 ## Périmètre
 

@@ -24,7 +24,7 @@ import (
 const (
 	securityURL     = "https://github.com/giis-io/sagnac-cli/blob/main/SECURITY.md"
 	securityContact = "securite@sagnac.fr"
-	postalAddress   = "66 avenue des Champs-Élysées, 75008 Paris"
+	legalNoticeURL  = "https://sagnac.fr/mentions-legales"
 	apacheSHA256    = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
 )
 
@@ -71,10 +71,14 @@ func TestNoticePresent(t *testing.T) {
 		t.Fatalf("NOTICE missing: %v", err)
 	}
 	notice := string(data)
-	for _, want := range []string{"GIIS", postalAddress, securityContact} {
+	for _, want := range []string{"GIIS", legalNoticeURL, securityContact} {
 		if !strings.Contains(notice, want) {
 			t.Errorf("NOTICE lacks %q", want)
 		}
+	}
+	// The postal address lives in the legal notice of the site, not in the repository.
+	if strings.Contains(notice, "Champs") {
+		t.Errorf("NOTICE must not carry the postal address")
 	}
 }
 
