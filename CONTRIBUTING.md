@@ -112,9 +112,10 @@ Prérequis sur `giis-io/sagnac-cli` :
 
 Seul `release.yml` peut écrire dans le dépôt, demander un jeton OIDC et lire
 des secrets (les seuls `APPLE_*`), et seulement sur le runner jetable :
-`scripts/verifier-workflows.sh` refuse ces droits ailleurs, refuse tout runner
-hébergé par GitHub et le groupe partagé `giis-usine-lourd` pour un job qui
-écrit, et refuse à `release.yml` tout autre déclencheur que le lancement
+`scripts/verifier-workflows.sh` refuse ces droits ailleurs, impose aux contrôles
+d'une demande de fusion le runner hébergé par GitHub `ubuntu-24.04` (une
+machine neuve par job), refuse tout runner auto-hébergé de GIIS hors du runner
+jetable de publication, et refuse à `release.yml` tout autre déclencheur que le lancement
 manuel et tout autre job que `release`. Pour vérifier une version à la main,
 voir « Installer » dans `README.md`.
 

@@ -1,5 +1,4 @@
-# Labels of the self-hosted runner group of this repository (.github/workflows/pr.yml).
+# Labels of the disposable release runner are passed as an input (release.yml);
+# the checks of a pull request run on GitHub-hosted runners (pr.yml).
 self-hosted-runner:
-  labels:
-    - sagnac-cli-pr
-    - giis-usine-lourd
+  labels: []

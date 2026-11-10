@@ -1,9 +1,8 @@
-# Checks of a pull request. Runs on disposable VMs, one job each. Until the
-# first public release, the repository is private and uses the runner group
-# giis-usine-lourd; the dedicated group sagnac-cli-pr, limited to this
-# repository, replaces it before the repository becomes public. No token
-# beyond reading the code, no OIDC token, no secret; the workflows of outside
-# contributors wait for the approval of a maintainer. scripts/verifier-workflows.sh enforces
+# Checks of a pull request. The repository is public: anyone can open a pull
+# request from a fork, so these jobs run on GitHub-hosted runners (a fresh VM
+# per job), never on the self-hosted runners of GIIS. No token beyond reading
+# the code, no OIDC token, no secret; the workflows of outside contributors
+# wait for the approval of a maintainer. scripts/verifier-workflows.sh enforces
 # these rules on every workflow of the repository.
 name: pr
 
@@ -25,9 +24,7 @@ defaults:
 jobs:
   workflows:
     name: workflows et scripts
-    runs-on:
-      group: giis-usine-lourd
-      labels: [giis-usine-lourd]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,9 +35,7 @@ jobs:
 
   dco:
     name: certificat d'origine (DCO)
-    runs-on:
-      group: giis-usine-lourd
-      labels: [giis-usine-lourd]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,9 +49,7 @@ jobs:
 
   go:
     name: vet, tests, vulnérabilités
-    runs-on:
-      group: giis-usine-lourd
-      labels: [giis-usine-lourd]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
