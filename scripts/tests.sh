@@ -62,7 +62,7 @@ permissions:
   contents: read
 jobs:
   t:
-    runs-on: [self-hosted]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/local
@@ -143,8 +143,12 @@ expect 1 "release.yml: the job name is not release" "$here/verifier-workflows.sh
 printf '%s\n  build:\n    runs-on:\n      group: giis-usine-lourd\n    steps:\n      - run: make\n' "$rel" >"$wf/release.yml"
 expect 1 "release.yml: a second job" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n' "$rel" >"$wf/release.yml"
-printf '%s\n' "$good" | sed 's/runs-on: \[self-hosted\]/runs-on: macos-14/' >"$wf/pr.yml"
-expect 1 "pr.yml: GitHub-hosted runner" "$here/verifier-workflows.sh" "$tmp/wf"
+for bad in "macos-14" "ubuntu-latest" "[self-hosted]" "[self-hosted, linux, sagnac-cli-pr]"; do
+	printf '%s\n' "$good" | sed "s/runs-on: ubuntu-24.04/runs-on: $bad/" >"$wf/pr.yml"
+	expect 1 "pr.yml: runner $bad" "$here/verifier-workflows.sh" "$tmp/wf"
+done
+printf '%s\n' "$good" | sed 's/    runs-on: ubuntu-24.04/    runs-on:\n      group: giis-usine-lourd/' >"$wf/pr.yml"
+expect 1 "pr.yml: the shared runners of the factory" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n  id-token: write\n' "$good" >"$wf/pr.yml"
 expect 1 "id-token stays forbidden in pr.yml" "$here/verifier-workflows.sh" "$tmp/wf"
 printf '%s\n  contents: write\n' "$good" >"$wf/pr.yml"
