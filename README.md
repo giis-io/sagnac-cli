@@ -1,19 +1,14 @@
 # sagnac
 
-> **Version de développement, pas encore publiée.** Aucune version n'est encore
-> distribuée : le code évolue sans préavis. Pour signaler une vulnérabilité, voir
-> [SECURITY.md](SECURITY.md).
-
-`sagnac` est la ligne de commande de la formation Sagnac. Elle s'installe sur le
-poste de l'élève, lance les vérifications d'un lab et affiche le résultat.
+`sagnac` est la ligne de commande de Sagnac, entraînement pratique en ligne.
+Elle s'installe sur le poste de l'élève, lance les vérifications d'un lab et affiche le résultat.
 
 Disponibles : `login`, `logout`, `pull`, `open`, `check`, `clean`, `purge`, `doctor`, `version`, `help`.
 Les commandes `submit` et `update` arrivent ensuite.
 
 ## Installer
 
-Aucune version n'est encore publiée. À partir de la première, chaque version
-est publiée sur la page des versions du dépôt avec ses sommes de contrôle
+Chaque version est publiée sur la page des versions du dépôt avec ses sommes de contrôle
 SHA-256 (`SHA256SUMS`), une signature de ce fichier et la nomenclature
 logicielle (SBOM CycloneDX) de chaque archive, `sagnac_<version>_<système>_<architecture>.cdx.json`,
 elle aussi listée dans `SHA256SUMS`. Aucune méthode
@@ -109,10 +104,14 @@ refuse alors de démarrer.
 
 ## Kits de labs
 
-Les kits que télécharge `sagnac pull` ne sont pas encore signés. `sagnac`
-vérifie l'empreinte SHA-256 annoncée par la plateforme, ce qui protège contre un
-téléchargement corrompu mais pas contre une plateforme compromise. La
-vérification de signature viendra avant toute publication.
+Un kit contient du code qui s'exécute sur votre machine (`make setup`, les
+contrôles). `sagnac pull` vérifie donc deux choses avant de l'installer :
+l'empreinte SHA-256 annoncée par la plateforme, et une signature Ed25519 faite
+par GIIS hors de la plateforme, avec une clé dont la partie publique est
+inscrite dans `sagnac`. La signature couvre le nom du lab, sa version et le
+contenu du kit. Un kit sans signature valide est refusé
+(`KIT_SIGNATURE_INVALID`) : une plateforme compromise peut refuser de servir un
+kit, pas en faire exécuter un autre.
 
 ## Construire
 
