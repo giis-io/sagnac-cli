@@ -56,7 +56,7 @@ type doctorCheck struct {
 }
 
 // doctorReport has the fields of sagnac-doctor/1. The optional field wsl is
-// left out: the CLI does not detect WSL.
+// left out: the check "os" carries it (WSL_NOT_SUPPORTED).
 type doctorReport struct {
 	Schema string        `json:"schema"`
 	CLI    string        `json:"cli"`

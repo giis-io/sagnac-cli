@@ -106,7 +106,9 @@ func startupNotices(ctx context.Context, plan noticePlan, stderr io.Writer) {
 }
 
 // runDoctor reports what needs attention: a newer version, a security
-// release, the end of support. It needs no account and sends no token.
+// release, the end of support, then the machine (doctor_poste.go: system,
+// memory, disk, tools, container engine, network cut). It needs no account,
+// sends no token and changes nothing on the machine.
 // Exit code 1 when a point has to be fixed, 0 otherwise (a check that could
 // not be made is not a failure); exitCodeOf gives the others.
 //
@@ -178,6 +180,18 @@ func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stdout, i18n.T("doctor.support_ok", endOfSupport))
 	}
 
+	checks := append([]doctorCheck{versionCheck, supportCheck}, machineChecks(ctx, stdout)...)
+	if ctx.Err() != nil {
+		// Interrupted during the checks of the machine: their result is not kept.
+		fmt.Fprintln(stderr, i18n.T("error.interrupted"))
+		return exitCodeOf(ctx.Err())
+	}
+	for _, c := range checks[2:] {
+		if c.Status == checkFail {
+			toFix++
+		}
+	}
+
 	code := exitOK
 	if toFix == 0 {
 		fmt.Fprintln(stdout, i18n.T("doctor.nothing"))
@@ -186,7 +200,7 @@ func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		code = exitCodeOf(errRefused)
 	}
 	if share {
-		if shared := runShare(ctx, []doctorCheck{versionCheck, supportCheck}, stdout, stderr); shared != exitOK {
+		if shared := runShare(ctx, checks, stdout, stderr); shared != exitOK {
 			return shared
 		}
 	}

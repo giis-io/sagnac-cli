@@ -30,6 +30,8 @@ func TestMain(m *testing.M) {
 	}
 	testKitKey = priv
 	kit.SetTrustedKeys([]kit.PublicKey{{ID: kit.KeyID(pub), Key: pub}})
+	// doctor never reads the machine that runs the tests.
+	host = healthyHost()
 	os.Setenv("SAGNAC_VERSION_URL", "http://127.0.0.1:1/cli/version.json")
 	os.Setenv("XDG_CACHE_HOME", dir)
 	code := m.Run()
