@@ -134,8 +134,8 @@ une étiquette de publication (`v0.1.0`), c'est l'étiquette exacte.
 | `sagnac check --show-payload` | Lance les contrôles, puis affiche les deux requêtes que `sagnac check` enverrait à la plateforme (`POST /v1/sessions`, `POST /v1/attempts`), en-têtes et corps compris, sans rien envoyer ni contacter. Le jeton n'est jamais affiché. Voir `docs/contrat.md`, section 4 bis. |
 | `sagnac clean [--all] [--dry-run]` | Supprime le cluster du lab courant (tous les clusters avec `--all`) et les fichiers temporaires du cache de Sagnac. Garde les modèles, les outils, les images de base, votre `workspace/` et les résultats en attente. `--dry-run` affiche ce qui serait supprimé. Voir `docs/contrat.md`, section 5 bis. |
 | `sagnac purge` | Supprime les résultats en attente d'envoi. |
-| `sagnac doctor` | Signale une version plus récente, un avis de sécurité et la fin de support proche. Fonctionne sans compte. |
-| `sagnac doctor --share` | Fait le même diagnostic et envoie le rapport à Sagnac (`POST /v1/doctor/reports`, schéma `sagnac-doctor/1`) : version de `sagnac`, système, architecture, et pour chaque point un identifiant, un état et un code. Ni compte, ni jeton, ni chemin, ni nom d'utilisateur ou de poste. Affiche l'identifiant du rapport, à donner au support. Si l'envoi échoue, le rapport reste affiché : code 2 si la plateforme limite les envois ou ne répond pas, 3 si elle refuse le rapport. |
+| `sagnac doctor` | Signale une version plus récente, un avis de sécurité et la fin de support proche, puis vérifie le poste : système, mémoire, disque libre, outils, moteur de conteneurs, coupure du réseau. Fonctionne sans compte, ne modifie rien. Voir « Ce que `sagnac doctor` vérifie ». |
+| `sagnac doctor --share` | Fait le même diagnostic et envoie le rapport à Sagnac (`POST /v1/doctor/reports`, schéma `sagnac-doctor/1`) : version de `sagnac`, système, architecture, et pour chaque point un identifiant, un état et un code, jamais une valeur mesurée (ni quantité de mémoire, ni place sur le disque). Ni compte, ni jeton, ni chemin, ni nom d'utilisateur ou de poste. Affiche l'identifiant du rapport, à donner au support. Si l'envoi échoue, le rapport reste affiché : code 2 si la plateforme limite les envois ou ne répond pas, 3 si elle refuse le rapport. |
 | `sagnac version` | Affiche la version, la date de fin de support, l'éditeur et le contact sécurité. |
 | `sagnac help` | Affiche l'aide. |
 
@@ -155,6 +155,38 @@ impossible. Un avis de sécurité ou une fin de support à moins de six mois s'a
 la sortie d'erreur à chaque lancement, sans changer le code de sortie. L'aide
 (`sagnac help`, `-h`, aucune commande) et les commandes inconnues répondent tout
 de suite : elles lisent la copie gardée, sans interroger le réseau.
+
+## Ce que `sagnac doctor` vérifie
+
+`sagnac doctor` lit le poste sans rien y changer : il n'installe rien, ne lance aucun
+conteneur et ne demande jamais `sudo`. Chaque lecture est bornée à 5 secondes, l'ensemble
+à 20. Une lecture impossible donne « Non vérifié », jamais un point à corriger. Le code
+de sortie est 1 s'il reste au moins un point « À corriger », 0 sinon.
+
+| Point | Identifiant | Sans remarque | « Attention » | « À corriger » |
+|---|---|---|---|---|
+| Système | `os` | macOS ou Linux | Linux sous WSL, non pris en charge (`WSL_NOT_SUPPORTED`) | |
+| Mémoire | `memory` | 15 Gio ou plus | de 7 à 15 Gio (`MEMORY_BELOW_RECOMMENDED`) | moins de 7 Gio (`MEMORY_BELOW_MINIMUM`) |
+| Disque libre du dossier personnel | `disk` | 40 Go ou plus | de 30 à 40 Go (`DISK_BELOW_RECOMMENDED`) | moins de 30 Go (`DISK_BELOW_MINIMUM`) |
+| Outils `git`, `curl`, `jq`, `make`, `python3` | `tool_git`, `tool_curl`, `tool_jq`, `tool_make`, `tool_python3` | trouvé dans le `PATH` | | introuvable (`TOOL_MISSING`) |
+| Moteur de conteneurs | `container_engine` | `docker version` répond | commande `docker` absente (`ENGINE_NOT_INSTALLED`) | le moteur ne répond pas (`ENGINE_NOT_RUNNING`) ou refuse votre compte (`ENGINE_PERMISSION_DENIED`) |
+| Mémoire du moteur | `container_memory` | 3,5 Gio ou plus | moins (`ENGINE_MEMORY_LOW`) | |
+| Coupure du réseau pendant les contrôles | `network_cut` | disponible | indisponible sur ce poste (`NETWORK_CUT_UNAVAILABLE`) | |
+
+Les seuils suivent ce que le parcours demande : 8 Go de mémoire au minimum et 16 conseillés,
+30 Go de disque libre et 40 conseillés, 4 Go pour le moteur de conteneurs. Un poste vendu
+avec 8 Go en annonce un peu moins au système, et un moteur réglé sur 4 Go aussi : les seuils
+sont placés juste en dessous du chiffre. La place libre vaut pour le parcours entier ; la
+première partie en occupe 10 Go.
+
+Le moteur absent n'est qu'une remarque : le premier lab s'en passe. Seules `docker version`
+et la mémoire de `docker info` sont lues. Avec un autre moteur que Docker, ou une réponse
+illisible, le point est « Non vérifié ». Sous macOS, `git`, `make` et `python3` comptent
+comme absents tant que les outils de développement d'Apple ne sont pas installés.
+
+Quand la coupure du réseau est indisponible (Ubuntu 24.04 et suivants, par exemple),
+`sagnac check` fonctionne quand même, réseau ouvert : ne désactivez aucune protection du
+système.
 
 ## Ce que `sagnac check` envoie
 
