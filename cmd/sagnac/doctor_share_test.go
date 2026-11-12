@@ -118,6 +118,17 @@ func TestDoctorShareSendsTheSchemaOnly(t *testing.T) {
 		"checks": []any{
 			map[string]any{"id": "version", "status": "ok"},
 			map[string]any{"id": "support", "status": "ok"},
+			map[string]any{"id": "os", "status": "ok"},
+			map[string]any{"id": "memory", "status": "ok"},
+			map[string]any{"id": "disk", "status": "ok"},
+			map[string]any{"id": "tool_git", "status": "ok"},
+			map[string]any{"id": "tool_curl", "status": "ok"},
+			map[string]any{"id": "tool_jq", "status": "ok"},
+			map[string]any{"id": "tool_make", "status": "ok"},
+			map[string]any{"id": "tool_python3", "status": "ok"},
+			map[string]any{"id": "container_engine", "status": "ok"},
+			map[string]any{"id": "container_memory", "status": "ok"},
+			map[string]any{"id": "network_cut", "status": "ok"},
 		},
 	}
 	if !reflect.DeepEqual(m, want) {
@@ -170,7 +181,7 @@ func TestDoctorShareChecksFollowTheDiagnosis(t *testing.T) {
 			continue
 		}
 		got := checksOf(t, rs.report(t))
-		if len(got) != 2 || !reflect.DeepEqual(got[0], c.version) || !reflect.DeepEqual(got[1], c.support) {
+		if len(got) != 13 || !reflect.DeepEqual(got[0], c.version) || !reflect.DeepEqual(got[1], c.support) {
 			t.Errorf("%s: checks %v", c.name, got)
 		}
 	}
