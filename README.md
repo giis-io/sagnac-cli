@@ -89,7 +89,7 @@ curl -fsSLO "$BASE/SHA256SUMS.sigstore.json"
 
 ### Depuis les sources
 
-On construit `sagnac` soi-même, depuis un clone du dépôt. Il faut Go 1.26.10
+On construit `sagnac` soi-même, depuis un clone du dépôt. Il faut Go 1.26.11
 (version fixée dans `go.mod`) et `make`.
 
 ```
