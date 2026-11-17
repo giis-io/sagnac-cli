@@ -26,7 +26,18 @@ func healthyHost() hostProbe {
 			return poste.EngineState{State: poste.EngineReady, Memory: 8 * gib, MemoryOK: true}
 		},
 		networkCut: func() bool { return true },
+		library:    func(context.Context, string) (bool, bool) { return true, true },
 	}
+}
+
+// machineIDs are the checks of the machine, in the order of the report. The
+// library of the model server is a check of Linux alone.
+func machineIDs(goos string) []string {
+	ids := []string{"os", "memory", "disk", "tool_git", "tool_curl", "tool_jq", "tool_make", "tool_python3"}
+	if goos == "linux" {
+		ids = append(ids, "library_libgomp")
+	}
+	return append(ids, "container_engine", "container_memory", "network_cut")
 }
 
 // withHost runs doctor on a machine changed by change.
@@ -55,6 +66,17 @@ func TestMachineChecks(t *testing.T) {
 		return func(h *hostProbe) {
 			h.engine = func(context.Context) poste.EngineState {
 				return poste.EngineState{State: state, Memory: memory, MemoryOK: ok}
+			}
+		}
+	}
+	library := func(found, ok bool) func(*hostProbe) {
+		return func(h *hostProbe) {
+			h.goos = "linux"
+			h.library = func(_ context.Context, name string) (bool, bool) {
+				if name != "libgomp.so.1" {
+					t.Errorf("library %q looked up", name)
+				}
+				return found, ok
 			}
 		}
 	}
@@ -91,6 +113,15 @@ func TestMachineChecks(t *testing.T) {
 		{"disk at 40 GB", func(h *hostProbe) { h.diskFree = func() (uint64, bool) { return 40 * gb, true } }, nil, 0, "Disque : 40 Go libres."},
 		{"jq and make missing", func(h *hostProbe) { h.tool = func(n string) bool { return n != "jq" && n != "make" } },
 			[]doctorCheck{{"tool_jq", checkFail, "TOOL_MISSING"}, {"tool_make", checkFail, "TOOL_MISSING"}}, 2, "Outils : git, curl, python3."},
+		{"libgomp present", library(true, true), nil, 0, "Bibliothèque libgomp : présente."},
+		{"libgomp missing", library(false, true),
+			[]doctorCheck{{"library_libgomp", checkFail, "LIBRARY_MISSING"}}, 1, "apt-get install libgomp1"},
+		{"libgomp not looked up", library(false, false),
+			[]doctorCheck{{"library_libgomp", checkSkip, ""}}, 0, "Non vérifié : la bibliothèque libgomp.so.1"},
+		{"libgomp is never looked up on macOS", func(h *hostProbe) {
+			h.goos = "darwin"
+			h.library = func(context.Context, string) (bool, bool) { t.Error("library looked up on macOS"); return false, true }
+		}, nil, 0, "Rien à corriger."},
 		{"engine absent", engine(poste.EngineAbsent, 0, false),
 			[]doctorCheck{{"container_engine", checkWarn, "ENGINE_NOT_INSTALLED"}, {"container_memory", checkSkip, ""}}, 0, "Le premier lab s'en passe"},
 		{"engine stopped", engine(poste.EngineStopped, 0, false),
@@ -112,16 +143,19 @@ func TestMachineChecks(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var out strings.Builder
+			var ids []string
 			checks := func() []doctorCheck {
 				old := host
 				defer func() { host = old }()
 				h := healthyHost()
 				c.change(&h)
 				host = h
+				ids = machineIDs(h.goos)
 				return machineChecks(context.Background(), &out)
 			}()
-			ids := []string{"os", "memory", "disk", "tool_git", "tool_curl", "tool_jq", "tool_make", "tool_python3",
-				"container_engine", "container_memory", "network_cut"}
+			if len(ids) == 11 && strings.Contains(out.String(), "libgomp") {
+				t.Errorf("a line about libgomp outside Linux:\n%s", out.String())
+			}
 			if len(checks) != len(ids) {
 				t.Fatalf("%d checks, want %d", len(checks), len(ids))
 			}
@@ -161,7 +195,7 @@ func TestMachineMessagesPointToTheGuide(t *testing.T) {
 	for _, k := range i18n.Keys() {
 		msg := i18n.T(k)
 		machine := strings.HasPrefix(k, "doctor.os_") || strings.HasPrefix(k, "doctor.memory_") || strings.HasPrefix(k, "doctor.disk_") ||
-			strings.HasPrefix(k, "doctor.tool") || strings.HasPrefix(k, "doctor.engine_") || strings.HasPrefix(k, "doctor.network_cut_")
+			strings.HasPrefix(k, "doctor.tool") || strings.HasPrefix(k, "doctor.libgomp_") || strings.HasPrefix(k, "doctor.engine_") || strings.HasPrefix(k, "doctor.network_cut_")
 		if !machine || !(strings.HasPrefix(msg, "Attention") || strings.HasPrefix(msg, "À corriger")) {
 			continue
 		}
@@ -205,7 +239,7 @@ func TestMachineReportHoldsNoMeasure(t *testing.T) {
 	if err := json.Unmarshal(rs.bodies[0], &report); err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Checks) != 13 || len(report.Checks) > maxDoctorChecks {
+	if len(report.Checks) != 2+len(machineIDs(runtime.GOOS)) || len(report.Checks) > maxDoctorChecks {
 		t.Errorf("%d checks", len(report.Checks))
 	}
 	got := map[string]string{}
@@ -231,7 +265,7 @@ func TestMachineReportHoldsNoMeasure(t *testing.T) {
 // Every id and code the checks may give fits the schema of the report.
 func TestMachineCodesFitTheSchema(t *testing.T) {
 	for _, code := range []string{"WSL_NOT_SUPPORTED", "MEMORY_BELOW_RECOMMENDED", "MEMORY_BELOW_MINIMUM", "DISK_BELOW_RECOMMENDED",
-		"DISK_BELOW_MINIMUM", "TOOL_MISSING", "ENGINE_NOT_INSTALLED", "ENGINE_NOT_RUNNING", "ENGINE_PERMISSION_DENIED",
+		"DISK_BELOW_MINIMUM", "TOOL_MISSING", "LIBRARY_MISSING", "ENGINE_NOT_INSTALLED", "ENGINE_NOT_RUNNING", "ENGINE_PERMISSION_DENIED",
 		"ENGINE_MEMORY_LOW", "NETWORK_CUT_UNAVAILABLE"} {
 		if !reCheckCode.MatchString(code) {
 			t.Errorf("code %q outside the schema", code)
@@ -240,6 +274,13 @@ func TestMachineCodesFitTheSchema(t *testing.T) {
 	for _, name := range requiredTools {
 		if !reCheckID.MatchString("tool_" + name) {
 			t.Errorf("id of %q outside the schema", name)
+		}
+	}
+	for _, goos := range []string{"linux", "darwin"} {
+		for _, id := range machineIDs(goos) {
+			if !reCheckID.MatchString(id) {
+				t.Errorf("id %q outside the schema", id)
+			}
 		}
 	}
 	if !reflect.DeepEqual(requiredTools, []string{"git", "curl", "jq", "make", "python3"}) {

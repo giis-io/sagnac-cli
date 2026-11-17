@@ -37,6 +37,11 @@ const (
 // requiredTools are looked up in the PATH, in this order.
 var requiredTools = []string{"git", "curl", "jq", "make", "python3"}
 
+// modelServerLibrary is the system library the model server of the labs
+// (llama-server, downloaded by "make setup") needs to start on Linux. A
+// minimal installation does not have it.
+const modelServerLibrary = "libgomp.so.1"
+
 // hostProbe reads the machine; tests replace it.
 type hostProbe struct {
 	goos, goarch string
@@ -46,6 +51,7 @@ type hostProbe struct {
 	tool         func(name string) bool
 	engine       func(ctx context.Context) poste.EngineState
 	networkCut   func() bool
+	library      func(ctx context.Context, name string) (found, ok bool)
 }
 
 var host = hostProbe{
@@ -66,6 +72,7 @@ var host = hostProbe{
 		_, ok := oracle.NetworkCutAvailable()
 		return ok
 	},
+	library: poste.Library,
 }
 
 // oneDecimal writes bytes in units of unit with one decimal, French comma,
@@ -140,6 +147,17 @@ func machineChecks(ctx context.Context, stdout io.Writer) []doctorCheck {
 	}
 	if len(found) > 0 {
 		fmt.Fprintln(stdout, i18n.T("doctor.tools_ok", strings.Join(found, ", ")))
+	}
+
+	if host.goos == "linux" {
+		switch found, ok := host.library(ctx, modelServerLibrary); {
+		case found:
+			add("library_libgomp", checkOK, "", i18n.T("doctor.libgomp_ok"))
+		case ok:
+			add("library_libgomp", checkFail, "LIBRARY_MISSING", i18n.T("doctor.libgomp_missing"))
+		default:
+			add("library_libgomp", checkSkip, "", i18n.T("doctor.libgomp_skip"))
+		}
 	}
 
 	engine := host.engine(ctx)
