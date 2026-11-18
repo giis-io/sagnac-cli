@@ -1,5 +1,5 @@
 // Package poste reads what "sagnac doctor" checks on the machine: memory,
-// free disk space, tools, container engine. It changes nothing on the
+// free disk space, tools, system library, container engine. It changes nothing on the
 // machine, installs nothing and never asks for more rights. A reading that
 // cannot be made is reported as such, never as a failure.
 package poste
@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -31,6 +33,70 @@ func DiskFree(path string) (uint64, bool) {
 func Tool(name string) bool {
 	path, err := exec.LookPath(name)
 	return err == nil && !placeholder(path)
+}
+
+// ldconfigCommands are tried in this order: on Debian, the directory of
+// ldconfig is not in the PATH of a user.
+var ldconfigCommands = []string{"ldconfig", "/sbin/ldconfig", "/usr/sbin/ldconfig"}
+
+// libraryRoots are the directories the loader reads without the cache;
+// their multiarch subdirectories (x86_64-linux-gnu, aarch64-linux-gnu) are
+// read too.
+var libraryRoots = []string{"/lib", "/usr/lib", "/lib64", "/usr/lib64"}
+
+// Library tells whether the loader of a Linux system can find the shared
+// library name (libgomp.so.1). It reads the cache of the loader
+// ("ldconfig -p"), then the usual directories. ok is false when the library
+// is not found and the cache could not be read: nothing can be said.
+func Library(ctx context.Context, name string) (found, ok bool) {
+	return library(ctx, name, run, libraryRoots)
+}
+
+func library(ctx context.Context, name string, run runner, roots []string) (found, ok bool) {
+	for _, command := range ldconfigCommands {
+		out, _, err := run(ctx, command, "-p")
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			break
+		}
+		if err != nil {
+			continue
+		}
+		listed, cache := cacheLists(out, name)
+		if listed {
+			return true, true
+		}
+		ok = cache
+		break
+	}
+	for _, root := range roots {
+		paths := []string{filepath.Join(root, name)}
+		if multiarch, err := filepath.Glob(filepath.Join(root, "*-linux-gnu*", name)); err == nil {
+			paths = append(paths, multiarch...)
+		}
+		for _, path := range paths {
+			if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() {
+				return true, true
+			}
+		}
+	}
+	return false, ok
+}
+
+// cacheLists reads the output of "ldconfig -p", one library per line:
+// "libgomp.so.1 (libc6,x86-64) => /lib/x86_64-linux-gnu/libgomp.so.1".
+// cache is false when no line has that form.
+func cacheLists(out, name string) (listed, cache bool) {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 3 || f[len(f)-2] != "=>" {
+			continue
+		}
+		cache = true
+		if f[0] == name {
+			return true, true
+		}
+	}
+	return false, cache
 }
 
 // State of the container engine.
